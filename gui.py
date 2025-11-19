@@ -1,0 +1,263 @@
+import tkinter as tk
+from tkinter import filedialog, scrolledtext, messagebox
+from tkinterdnd2 import DND_FILES, TkinterDnD
+import syllabize
+import os
+
+class LRCApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("LRC Syllabizer")
+        self.root.geometry("900x750")
+        
+        self.current_lines = []
+        self.current_content = ""
+        self.detected_lang = "other"
+        
+        # Variables
+        self.separator_var = tk.StringVar(value="plus")
+        self.romanize_var = tk.BooleanVar(value=True)
+        self.capitalize_var = tk.BooleanVar(value=True) # Default to True
+        self.custom_sep_var = tk.StringVar()
+        
+        # --- Start Screen ---
+        self.start_frame = tk.Frame(self.root)
+        self.start_frame.pack(fill='both', expand=True)
+        
+        self.drop_label = tk.Label(self.start_frame, text="Drag & Drop .lrc File Here\n\nOR\n\nClick to Select File", 
+                                   font=("Arial", 20), bg="#f0f0f0", relief="groove", cursor="hand2")
+        self.drop_label.pack(fill='both', expand=True, padx=50, pady=50)
+        
+        # Bind events
+        self.drop_label.bind("<Button-1>", lambda e: self.select_file())
+        
+        # Drag and Drop registration
+        self.drop_label.drop_target_register(DND_FILES)
+        self.drop_label.dnd_bind('<<Drop>>', self.on_drop)
+        
+        # --- Main Screen (Initially Hidden) ---
+        self.main_frame = tk.Frame(self.root)
+        
+        # Control Frame
+        self.control_frame = tk.Frame(self.main_frame)
+        self.control_frame.pack(pady=10, fill='x', padx=10)
+        
+        # File Info & Reset
+        self.file_info_frame = tk.Frame(self.control_frame)
+        self.file_info_frame.pack(side=tk.TOP, fill='x', pady=5)
+        
+        self.file_label = tk.Label(self.file_info_frame, text="No file selected", font=("Arial", 10, "bold"))
+        self.file_label.pack(side=tk.LEFT)
+        
+        self.reset_btn = tk.Button(self.file_info_frame, text="Open Different File", command=self.reset_to_start)
+        self.reset_btn.pack(side=tk.RIGHT)
+        
+        self.save_btn = tk.Button(self.file_info_frame, text="Save Output", command=self.save_file)
+        self.save_btn.pack(side=tk.RIGHT, padx=10)
+
+        # Settings Frame
+        self.settings_frame = tk.LabelFrame(self.control_frame, text="Settings")
+        self.settings_frame.pack(side=tk.TOP, pady=10, fill='x')
+        
+        # Separator Options
+        self.sep_subframe = tk.Frame(self.settings_frame)
+        self.sep_subframe.pack(side=tk.TOP, fill='x', padx=5, pady=5)
+        
+        tk.Label(self.sep_subframe, text="Separator:").pack(side=tk.LEFT)
+        
+        tk.Radiobutton(self.sep_subframe, text="+ (Ultra Star)", variable=self.separator_var, value="plus", command=self.update_output).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(self.sep_subframe, text="-", variable=self.separator_var, value="minus", command=self.update_output).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(self.sep_subframe, text="Custom", variable=self.separator_var, value="custom", command=self.on_separator_change).pack(side=tk.LEFT, padx=5)
+        
+        vcmd = (self.root.register(self.validate_custom_sep), '%P')
+        self.custom_sep_entry = tk.Entry(self.sep_subframe, textvariable=self.custom_sep_var, validate='key', validatecommand=vcmd, state='disabled', width=20)
+        self.custom_sep_entry.pack(side=tk.LEFT, padx=5)
+        self.custom_sep_entry.bind('<KeyRelease>', lambda e: self.update_output())
+        
+        # Language Options
+        self.opt_subframe = tk.Frame(self.settings_frame)
+        self.opt_subframe.pack(side=tk.TOP, fill='x', padx=5, pady=5)
+        
+        self.romanize_check = tk.Checkbutton(self.opt_subframe, text="Romanize/Transliterate", variable=self.romanize_var, command=self.update_output)
+        self.romanize_check.pack(side=tk.LEFT, padx=5)
+        
+        self.capitalize_check = tk.Checkbutton(self.opt_subframe, text="Capitalize First Word", variable=self.capitalize_var, command=self.update_output)
+        self.capitalize_check.pack(side=tk.LEFT, padx=5)
+        
+        # Content Area
+        self.content_frame = tk.Frame(self.main_frame)
+        self.content_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Left Column
+        self.left_frame = tk.Frame(self.content_frame)
+        self.left_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(0, 5))
+        tk.Label(self.left_frame, text="Original LRC:").pack(anchor='w')
+        self.original_text = scrolledtext.ScrolledText(self.left_frame, width=40, height=25)
+        self.original_text.pack(fill='both', expand=True)
+        
+        # Right Column
+        self.right_frame = tk.Frame(self.content_frame)
+        self.right_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(5, 0))
+        tk.Label(self.right_frame, text="Syllabized Output:").pack(anchor='w')
+        self.result_text = scrolledtext.ScrolledText(self.right_frame, width=40, height=25)
+        self.result_text.pack(fill='both', expand=True)
+
+    def on_drop(self, event):
+        file_path = event.data
+        # Handle potential curly braces in path (tkinterdnd quirk with spaces)
+        if file_path.startswith('{') and file_path.endswith('}'):
+            file_path = file_path[1:-1]
+        self.load_file(file_path)
+
+    def select_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("LRC Files", "*.lrc"), ("All Files", "*.*")])
+        if file_path:
+            self.load_file(file_path)
+
+    def load_file(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            self.current_lines = lines
+            self.file_label.config(text=os.path.basename(file_path))
+            
+            # Detect Language
+            full_text = "".join(lines)
+            self.detected_lang = syllabize.detect_language(full_text)
+            
+            # Configure UI based on language
+            self.configure_for_language(self.detected_lang)
+            
+            # Check Capitalization
+            # If all lines (with text) already start with uppercase, disable the option
+            all_capitalized = True
+            has_text = False
+            import re
+            for line in lines:
+                match = re.match(r'^(\[.*?\])(.*)', line)
+                if match:
+                    text = match.group(2).strip()
+                    if text:
+                        has_text = True
+                        if not text[0].isupper():
+                            all_capitalized = False
+                            break
+            
+            if has_text and all_capitalized:
+                self.capitalize_var.set(True)
+                self.capitalize_check.config(state='disabled', text="Capitalize First Word (Already Capitalized)")
+            else:
+                self.capitalize_var.set(True) # Default to True
+                self.capitalize_check.config(state='normal', text="Capitalize First Word")
+            
+            # Show content
+            self.original_text.delete(1.0, tk.END)
+            self.original_text.insert(tk.END, full_text)
+            
+            # Switch to main view
+            self.start_frame.pack_forget()
+            self.main_frame.pack(fill='both', expand=True)
+            
+            self.update_output()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process file: {e}")
+
+    def configure_for_language(self, lang):
+        if lang == 'japanese':
+            self.romanize_check.config(text="Romanize Japanese (Kanji/Kana -> Romaji)")
+            self.romanize_var.set(True)
+        elif lang == 'russian':
+            self.romanize_check.config(text="Transliterate Russian (Cyrillic -> Latin)")
+            self.romanize_var.set(True)
+        elif lang == 'mixed':
+            msg = "Mixed content detected (Japanese & Russian).\n\nProceed with mixed mode?"
+            if messagebox.askyesno("Mixed Content", msg):
+                self.romanize_check.config(text="Romanize/Transliterate (Mixed)")
+                self.romanize_var.set(True)
+            else:
+                # User said no? Maybe just treat as other?
+                # Or just stay in mixed but disable romanization by default?
+                self.romanize_check.config(text="Romanize/Transliterate (Mixed)")
+                self.romanize_var.set(False)
+        else:
+            self.romanize_check.config(text="Romanize/Transliterate (Not Available)")
+            self.romanize_var.set(False)
+            self.romanize_check.config(state='disabled')
+            return
+
+        self.romanize_check.config(state='normal')
+
+    def reset_to_start(self):
+        self.main_frame.pack_forget()
+        self.start_frame.pack(fill='both', expand=True)
+        self.current_lines = []
+        self.current_content = ""
+
+    def get_separator(self):
+        choice = self.separator_var.get()
+        if choice == "plus":
+            return "+"
+        elif choice == "minus":
+            return "-"
+        elif choice == "custom":
+            sep = self.custom_sep_var.get()
+            return sep if sep else "+"
+        return "+"
+
+    def update_output(self):
+        if not self.current_lines:
+            return
+            
+        sep = self.get_separator()
+        romanize = self.romanize_var.get()
+        capitalize = self.capitalize_var.get()
+        
+        processed_lines = []
+        for line in self.current_lines:
+            # Pass detected language to override per-line detection if needed, 
+            # or let process_line detect per line (better for mixed)
+            # Actually process_line detects per line if not overridden.
+            # If we are in 'mixed' mode, we should let it detect per line.
+            # If we are in 'japanese' mode, we might want to force it or just let it detect.
+            # Let's let it detect per line for maximum flexibility.
+            processed = syllabize.process_line(line.strip(), separator=sep, romanize=romanize, capitalize=capitalize)
+            processed_lines.append(processed)
+            
+        full_text = "\n".join(processed_lines)
+        
+        self.result_text.delete(1.0, tk.END)
+        self.result_text.insert(tk.END, full_text)
+        self.current_content = full_text
+
+    def on_separator_change(self):
+        if self.separator_var.get() == "custom":
+            self.custom_sep_entry.config(state='normal')
+        else:
+            self.custom_sep_entry.config(state='disabled')
+        self.update_output()
+
+    def validate_custom_sep(self, P):
+        if len(P) > 20:
+            return False
+        return True
+
+    def save_file(self):
+        if not self.current_content:
+            messagebox.showwarning("Warning", "No content to save.")
+            return
+            
+        file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(self.current_content)
+                messagebox.showinfo("Success", f"Saved to {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file: {e}")
+
+if __name__ == "__main__":
+    root = TkinterDnD.Tk()
+    app = LRCApp(root)
+    root.mainloop()
