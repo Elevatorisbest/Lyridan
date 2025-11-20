@@ -171,6 +171,7 @@ class LRCApp:
             
             self.current_lines = lines
             self.file_label.config(text=os.path.basename(file_path))
+            self.current_filename_base = os.path.splitext(os.path.basename(file_path))[0]
             
             # Detect Language
             full_text = "".join(lines)
@@ -241,6 +242,7 @@ class LRCApp:
         self.start_frame.pack(fill='both', expand=True)
         self.current_lines = []
         self.current_content = ""
+        self.current_filename_base = ""
 
     def get_separator(self):
         choice = self.separator_var.get()
@@ -289,7 +291,9 @@ class LRCApp:
             messagebox.showwarning("Warning", "No content to save.")
             return
             
-        file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        default_name = f"{self.current_filename_base} Syllabized" if hasattr(self, 'current_filename_base') and self.current_filename_base else "output"
+        
+        file_path = filedialog.asksaveasfilename(initialfile=default_name, defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
         if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
