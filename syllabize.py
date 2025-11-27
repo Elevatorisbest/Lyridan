@@ -1,5 +1,6 @@
 import re
-import sys
+import xml.etree.ElementTree as ET
+import json
 try:
     import pykakasi
     kks = pykakasi.kakasi()
@@ -7,88 +8,365 @@ except ImportError:
     kks = None
 
 try:
+    import transliterate
     from transliterate import translit
     HAS_TRANSLITERATE = True
 except ImportError:
     HAS_TRANSLITERATE = False
 
+try:
+    import pyphen
+    try:
+        # Try en_US first, then fallback to en
+        try:
+            dic = pyphen.Pyphen(lang='en_US')
+        except:
+            dic = pyphen.Pyphen(lang='en')
+    except Exception as e:
+        with open("pyphen_debug.log", "w") as f:
+            f.write(f"Error initializing Pyphen: {e}\n")
+        dic = None
+except ImportError:
+    with open("pyphen_debug.log", "w") as f:
+        f.write("ImportError: Could not import pyphen\n")
+    dic = None
+
 def detect_language(text):
-    # Simple heuristic detection
-    # Check for Cyrillic
-    if re.search(r'[а-яА-ЯёЁ]', text):
-        # Check if also has Japanese
-        if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text):
-            return 'mixed'
-        return 'russian'
-    # Check for Japanese
-    if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text):
+    """
+    Simple heuristic to detect language based on character sets.
+    Returns: 'japanese', 'russian', 'mixed', or 'other'
+    """
+    has_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text))
+    has_russian = bool(re.search(r'[а-яА-Я]', text))
+    
+    if has_japanese and has_russian:
+        return 'mixed'
+    elif has_japanese:
         return 'japanese'
+    elif has_russian:
+        return 'russian'
     return 'other'
 
+def ttml_time_to_seconds(ttml_time):
+    """
+    Converts TTML time string to seconds (float).
+    TTML: "20.501" (seconds) or "1:00.233" (mm:ss.ms)
+    """
+    try:
+        if ':' in ttml_time:
+            parts = ttml_time.split(':')
+            if len(parts) == 2:
+                m, s = parts
+                return int(m) * 60 + float(s)
+            elif len(parts) == 3:
+                h, m, s = parts
+                return int(h) * 3600 + int(m) * 60 + float(s)
+            else:
+                return 0.0
+        else:
+            return float(ttml_time)
+    except:
+        return 0.0
+
+def convert_ttml_time(ttml_time):
+    """
+    Converts TTML time string to LRC timestamp format.
+    """
+    total_seconds = ttml_time_to_seconds(ttml_time)
+    m_int = int(total_seconds // 60)
+    s_float = total_seconds % 60
+    s_int = int(s_float)
+    cs = int((s_float - s_int) * 100)
+    return f"{m_int:02d}:{s_int:02d}.{cs:02d}"
+
+def extract_ttml_data(file_path):
+    """
+    Parses TTML and returns a list of data dictionaries:
+    [{'start': float, 'end': float, 'text': str, 'line_id': str}, ...]
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Check for JSON wrapper
+        if content.strip().startswith('{'):
+            data = json.loads(content)
+            try:
+                ttml_content = data['data'][0]['attributes']['ttmlLocalizations']
+            except (KeyError, IndexError, TypeError):
+                match = re.search(r'<tt.*?</tt>', content, re.DOTALL)
+                if match:
+                    ttml_content = match.group(0)
+                else:
+                    raise ValueError("Could not find TTML content in JSON")
+        else:
+            ttml_content = content
+
+        # Parse XML
+        ttml_content = re.sub(r'^<\?xml.*?\?>', '', ttml_content).strip()
+        root = ET.fromstring(ttml_content)
+        
+        ns = {
+            'tt': 'http://www.w3.org/ns/ttml',
+            'itunes': 'http://music.apple.com/lyric-ttml-internal'
+        }
+        
+        # Find transliterations
+        trans_root = None
+        for trans in root.iter():
+            if trans.tag.endswith('transliteration'):
+                # Prefer ja-Latn or just take the first one
+                trans_root = trans
+                break
+        
+        source_root = trans_root if trans_root is not None else None
+        
+        extracted_spans = []
+        
+        if source_root is not None:
+            # Extract from transliteration
+            for text_node in source_root.iter():
+                if text_node.tag.endswith('text'):
+                    line_id = text_node.attrib.get('for')
+                    for span in text_node.iter():
+                        if span.tag.endswith('span') and span.text:
+                            begin = span.attrib.get('begin')
+                            end = span.attrib.get('end')
+                            if begin and end:
+                                extracted_spans.append({
+                                    'start': ttml_time_to_seconds(begin),
+                                    'end': ttml_time_to_seconds(end),
+                                    'text': span.text,
+                                    'line_id': line_id
+                                })
+        else:
+            # Extract from body
+            for p in root.iter():
+                if p.tag.endswith('p'):
+                    line_id = p.attrib.get(f'{{{ns["itunes"]}}}key')
+                    for span in p.iter():
+                        if span.tag.endswith('span') and span.text:
+                            begin = span.attrib.get('begin')
+                            end = span.attrib.get('end')
+                            if begin and end:
+                                extracted_spans.append({
+                                    'start': ttml_time_to_seconds(begin),
+                                    'end': ttml_time_to_seconds(end),
+                                    'text': span.text,
+                                    'line_id': line_id
+                                })
+                                
+        return extracted_spans
+
+    except Exception as e:
+        print(f"Error extracting TTML data: {e}")
+        return []
+
+def parse_ttml(file_path):
+    """
+    Parses a TTML file and returns a list of strings in LRC format.
+    Uses extract_ttml_data to get the raw data first.
+    """
+    data = extract_ttml_data(file_path)
+    lrc_lines = []
+    
+    # Group by line_id to reconstruct lines for LRC
+    current_line_id = None
+    current_line_parts = []
+    current_start_time = 0.0
+    
+    for item in data:
+        if item['line_id'] != current_line_id:
+            if current_line_id is not None:
+                # Flush previous line
+                # Use the start time of the first span
+                lrc_timestamp = convert_ttml_time(str(current_start_time))
+                full_text = "".join(current_line_parts).strip()
+                lrc_lines.append(f"[{lrc_timestamp}] {full_text}")
+            
+            current_line_id = item['line_id']
+            current_line_parts = []
+            current_start_time = item['start']
+            
+        current_line_parts.append(item['text'])
+        
+    # Flush last line
+    if current_line_id is not None:
+        lrc_timestamp = convert_ttml_time(str(current_start_time))
+        full_text = "".join(current_line_parts).strip()
+        lrc_lines.append(f"[{lrc_timestamp}] {full_text}")
+        
+    return lrc_lines
+
+def parse_rocksmith_beatmap(xml_path):
+    """Parses a Rocksmith XML file to extract beat times."""
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        ebeats = root.find('ebeats')
+        if ebeats is None:
+            return []
+        
+        beats = []
+        for ebeat in ebeats.findall('ebeat'):
+            time_val = float(ebeat.get('time'))
+            beats.append(time_val)
+        return sorted(beats)
+    except Exception as e:
+        print(f"Error parsing beatmap: {e}")
+        return []
+
+def snap_to_grid(time_val, beats, resolution=16):
+    """
+    Snaps a time value to the nearest grid point based on beats.
+    resolution: 4 (quarter), 8 (eighth), 16 (sixteenth), etc.
+    """
+    if not beats:
+        return time_val
+        
+    import bisect
+    idx = bisect.bisect_right(beats, time_val)
+    
+    if idx == 0:
+        return beats[0]
+    if idx >= len(beats):
+        return beats[-1]
+        
+    t1 = beats[idx-1]
+    t2 = beats[idx]
+    
+    duration = t2 - t1
+    
+    subdivisions = resolution // 4
+    if subdivisions < 1: subdivisions = 1
+    
+    grid_points = []
+    step = duration / subdivisions
+    for i in range(subdivisions + 1):
+        grid_points.append(t1 + i * step)
+        
+    closest_time = min(grid_points, key=lambda x: abs(x - time_val))
+    return closest_time
+
+def export_rocksmith_xml(data, output_path, offset=10.0, beatmap_path=None, empty_measure=False):
+    """
+    Exports syllabized lyrics to Rocksmith XML format.
+    
+    Args:
+        data: List of (timestamp, text) tuples.
+        output_path: Path to save the XML file.
+        offset: Time offset in seconds to add to all timestamps.
+        beatmap_path: Path to Rocksmith XML beatmap for snapping.
+        empty_measure: If True, adds the duration of the first measure to the offset.
+    """
+    import xml.etree.ElementTree as ET
+    
+    root = ET.Element("vocals", count=str(len(data)))
+    
+    beats = []
+    measure_duration = 0.0
+    
+    if beatmap_path:
+        beats = parse_rocksmith_beatmap(beatmap_path)
+        if empty_measure and len(beats) >= 2:
+            # Estimate measure duration from first beat interval * 4 (assuming 4/4)
+            beat_interval = beats[1] - beats[0]
+            measure_duration = beat_interval * 4.0
+    
+    final_offset = offset + measure_duration
+
+    for i, item in enumerate(data):
+        text = item['text']
+        time_val = item['start']
+        
+        # Apply Offset
+        time_val += final_offset
+        
+        # Snap to grid if beatmap is provided
+        if beats:
+            time_val = snap_to_grid(time_val, beats)
+        
+        words = text.split()
+        current_time = time_val
+        
+        for w_idx, word in enumerate(words):
+            lang = detect_language(word)
+            syllables = []
+            if lang == 'japanese':
+                syl_str = syllabize_word(word, separator='-')
+                syllables = syl_str.split('-')
+            elif lang == 'russian':
+                syl_str = syllabize_russian_word(word, separator='-')
+                syllables = syl_str.split('-')
+            else:
+                syl_str = syllabize_english_word(word, separator='-')
+                syllables = syl_str.split('-')
+            
+            for s_idx, syl in enumerate(syllables):
+                vocal = ET.SubElement(root, "vocal")
+                vocal.set("time", f"{current_time:.3f}")
+                vocal.set("note", "0")
+                vocal.set("length", "0.200")
+                
+                is_last_syllable = (s_idx == len(syllables) - 1)
+                is_last_word = (w_idx == len(words) - 1)
+                
+                lyric_text = syl
+                if not is_last_syllable:
+                    lyric_text += "-"
+                elif not is_last_word:
+                    lyric_text += "+"
+                else:
+                    # Last syllable of last word
+                    # Check if this is the end of the line (phrase)
+                    is_end_of_phrase = False
+                    if i == len(data) - 1:
+                        is_end_of_phrase = True
+                    elif data[i+1]['line_id'] != item['line_id']:
+                        is_end_of_phrase = True
+                    
+                    if is_end_of_phrase:
+                        lyric_text += "+"
+                
+                vocal.set("lyric", lyric_text)
+                current_time += 0.25 
+
+    tree = ET.ElementTree(root)
+    try:
+        tree.write(output_path, encoding="utf-8", xml_declaration=True)
+        return True
+    except Exception as e:
+        print(f"Error writing XML: {e}")
+        return False
+
 def syllabize_russian_word(word, separator="+"):
-    # Russian syllabization rules are complex, but we can approximate based on sonority.
-    # Vowels: а, е, ё, и, о, у, ы, э, ю, я
     vowels = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
-    
     syllables = []
-    current_syllable = ""
-    
-    # Simple algorithm:
-    # 1. Split by vowels. Each syllable must have exactly one vowel.
-    # 2. Consonants usually go to the next syllable (Onset), unless it violates sonority or is 'й'.
-    
-    # Let's use a simpler regex approach similar to the Japanese one but adapted.
-    # We iterate and build syllables.
-    
-    # Tokenize into (Consonants*)(Vowel)(Consonants*)
-    # But Russian allows complex clusters.
-    
-    # Alternative:
-    # Iterate through chars.
-    # If char is vowel, it ends the onset of current syllable (or starts it if no onset).
-    # Actually, standard rule: V-CV.
-    
-    # Let's try a pass-through approach.
-    
     n = len(word)
-    i = 0
-    
-    # We need to identify vowel positions
     vowel_indices = [j for j, char in enumerate(word) if char in vowels]
     
     if not vowel_indices:
-        return word # No vowels, one syllable (or abbreviation)
+        return word 
         
     start = 0
     for k, v_idx in enumerate(vowel_indices):
-        # Determine end of this syllable
-        # If it's the last vowel, end is end of word
         if k == len(vowel_indices) - 1:
             end = n
         else:
-            # Look at consonants between this vowel and next vowel
             next_v_idx = vowel_indices[k+1]
             num_consonants = next_v_idx - v_idx - 1
-            
-            # Rule of thumb:
-            # 0 consonants: V-V (e.g. a-u) -> split after V
-            # 1 consonant: V-CV -> split before C
-            # 2+ consonants: V-CCV or VC-CV?
-            # Usually split before the last consonant of the cluster (to maximize onset of next syllable)
-            # Unless the first consonant is 'й' (short i), then it stays as coda: Vi-CV
             
             if num_consonants == 0:
                 end = v_idx + 1
             elif num_consonants == 1:
                 end = v_idx + 1
             else:
-                # Check for 'й'
                 consonant_start = v_idx + 1
+
                 first_consonant = word[consonant_start]
                 if first_consonant.lower() == 'й':
-                    end = consonant_start + 1 # Split after й
+                    end = consonant_start + 1 
                 else:
-                    # Split before the last consonant
                     end = next_v_idx - 1
         
         syllables.append(word[start:end])
@@ -96,11 +374,112 @@ def syllabize_russian_word(word, separator="+"):
         
     return separator.join(syllables)
 
+def syllabize_english_word(word, separator="+"):
+    exceptions = {
+        "around": "a+round",
+        "crazy": "cra+zy",
+        "hello": "hel+lo",
+        "quoted": "quo+ted",
+        "better": "bet+ter",
+        "proper": "prop+er",
+        "english": "eng+lish",
+        "don't": "don't",
+        "can't": "can't",
+        "won't": "won't",
+        "didn't": "did+n't",
+        "couldn't": "could+n't",
+        "shouldn't": "should+n't",
+        "wouldn't": "would+n't",
+        "isn't": "is+n't",
+        "aren't": "aren't",
+        "wasn't": "was+n't",
+        "weren't": "weren't",
+        "hasn't": "has+n't",
+        "haven't": "have+n't",
+        "hadn't": "had+n't",
+        "doesn't": "does+n't",
+        "it's": "it's",
+        "that's": "that's",
+        "there's": "there's",
+        "here's": "here's",
+        "what's": "what's",
+        "who's": "who's",
+        "where's": "where's",
+        "when's": "when's",
+        "why's": "why's",
+        "how's": "how's",
+        "i'm": "i'm",
+        "you're": "you're",
+        "he's": "he's",
+        "she's": "she's",
+        "we're": "we're",
+        "they're": "they're",
+        "i've": "i've",
+        "you've": "you've",
+        "we've": "we've",
+        "they've": "they've",
+        "i'd": "i'd",
+        "you'd": "you'd",
+        "he'd": "he'd",
+        "she'd": "she'd",
+        "we'd": "we'd",
+        "they'd": "they'd",
+        "i'll": "i'll",
+        "you'll": "you'll",
+        "he'll": "he'll",
+        "she'll": "she'll",
+        "we'll": "we'll",
+        "they'll": "they'll"
+    }
+    
+    # Strip punctuation
+    match = re.match(r'^([^\w]*)(.*?)([^\w]*)$', word)
+    if not match:
+        return word
+        
+    prefix, core, suffix = match.groups()
+    
+    if not core:
+        return word
+        
+    lower_core = core.lower()
+    
+    if lower_core in exceptions:
+        syl_core = exceptions[lower_core]
+        # Restore capitalization if needed (simple case)
+        if core[0].isupper():
+            syl_core = syl_core[0].upper() + syl_core[1:]
+        syl_core = syl_core.replace('+', separator)
+        return f"{prefix}{syl_core}{suffix}"
+
+    if not dic:
+        return word
+        
+    # Handle internal hyphens/punctuation by splitting and processing parts
+    # e.g. "Word-with-hyphens" -> "Word", "with", "hyphens"
+    if '-' in core:
+        parts = core.split('-')
+        processed_parts = []
+        for part in parts:
+            if not part:
+                processed_parts.append("")
+                continue
+            # Recursively process parts (but avoid infinite recursion if no change)
+            # Actually, just pyphen the parts
+            syl_part = dic.inserted(part).replace('-', separator)
+            processed_parts.append(syl_part)
+        syl_core = "-".join(processed_parts)
+    else:
+        syl_core = dic.inserted(core).replace('-', separator)
+        
+    return f"{prefix}{syl_core}{suffix}"
+
 def syllabize_word(word, separator="+", language="japanese"):
     if language == 'russian':
         return syllabize_russian_word(word, separator)
+    elif language == 'english' or language == 'other':
+        return syllabize_english_word(word, separator)
         
-    # Default Japanese/Romaji logic
     syllables = []
     i = 0
     n = len(word)
@@ -108,7 +487,6 @@ def syllabize_word(word, separator="+", language="japanese"):
     while i < n:
         remaining = word[i:]
         
-        # 1. Match Core Syllable (Onset + Nucleus)
         core_pattern = r'^(?:(?:ch|sh|ts|[bcdfghjklmnpqrstvwxyz]y)[aeiou]|(?:ch|sh|ts|[bcdfghjklmnpqrstvwxyz])[aeiouy]|[aeiouy])'
         match = re.match(core_pattern, remaining, re.IGNORECASE)
         
@@ -120,7 +498,6 @@ def syllabize_word(word, separator="+", language="japanese"):
         current_syllable = match.group(0)
         i += len(current_syllable)
         
-        # 2. Check for Coda (Moraic 'n' or Sokuon)
         if i < n:
             next_char = word[i]
             if next_char.lower() == 'n':
@@ -144,7 +521,6 @@ def syllabize_word(word, separator="+", language="japanese"):
     return separator.join(syllables)
 
 def process_line(line, separator="+", romanize=False, capitalize=False, language_override=None):
-    # Extract timestamp and text
     match = re.match(r'^(\[.*?\])(.*)', line)
     if not match:
         return line 
@@ -152,7 +528,6 @@ def process_line(line, separator="+", romanize=False, capitalize=False, language
     timestamp = match.group(1)
     text = match.group(2)
     
-    # Detect language if not provided or if mixed
     lang = language_override if language_override else detect_language(text)
     
     if lang == 'japanese' and romanize and kks:
@@ -164,22 +539,7 @@ def process_line(line, separator="+", romanize=False, capitalize=False, language
         text = re.sub(r'\s+', ' ', text)
         
     elif lang == 'russian' and romanize and HAS_TRANSLITERATE:
-        # Transliterate Russian
-        try:
-            text = translit(text, 'ru', reversed=True)
-            # After transliteration, we should treat it as "japanese-like" (CV structure) or just use the Russian logic?
-            # The request says "support for all the same features... for Russian".
-            # If we transliterate, we get Latin chars. We should probably syllabize the Cyrillic FIRST, then transliterate?
-            # Or transliterate then syllabize?
-            # Usually for karaoke, you want the syllables of the romanized text.
-            # But Russian phonology is different.
-            # Let's stick to: Syllabize the original Russian, THEN transliterate the parts?
-            # Or Transliterate then Syllabize?
-            # Transliterated Russian doesn't strictly follow CV.
-            # Let's assume we syllabize the Russian text using Russian rules, then transliterate the result if requested.
-            pass # We will handle this in the word loop
-        except Exception:
-            pass
+        pass 
 
     if capitalize:
         text = text.strip()
@@ -194,23 +554,17 @@ def process_line(line, separator="+", romanize=False, capitalize=False, language
             syllabized_words.append("")
             continue
             
-        # If Russian and we want to transliterate, we have two options:
-        # 1. Syllabize Cyrillic -> Transliterate Syllables
-        # 2. Transliterate -> Syllabize Latin (might be messy)
-        # Let's go with 1.
-        
         if lang == 'russian':
             syll = syllabize_russian_word(word, separator)
             if romanize and HAS_TRANSLITERATE:
-                # Transliterate the whole syllabized string
-                # transliterate handles non-cyrillic chars gracefully usually
                 syll = translit(syll, 'ru', reversed=True)
             syllabized_words.append(syll)
         else:
-            # Japanese/Romaji
-            syllabized_words.append(syllabize_word(word, separator, language='japanese'))
+            # Use detected language, defaulting to japanese logic if it was detected as japanese, 
+            # otherwise use the detected lang (which might be 'other' -> english)
+            syllabized_words.append(syllabize_word(word, separator, language=lang))
         
-    return f"{' '.join(syllabized_words)}"
+    return f"{timestamp} {' '.join(syllabized_words)}"
 
 def main():
     input_file = 'test.lrc'
