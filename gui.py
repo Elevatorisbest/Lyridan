@@ -5,7 +5,6 @@ import syllabize
 import os
 import webbrowser
 from config import Config
-from PIL import Image, ImageTk
 
 # Theme Definitions
 THEMES = {
@@ -108,36 +107,30 @@ class TimedWarningDialog(tk.Frame):
         self.remaining = duration
         self.parent = parent
         
-        # Configure overlay to cover entire parent
-        self.place(relx=0, rely=0, relwidth=1, relheight=1)
-        
-        # Semi-transparent dark overlay background
-        self.configure(bg='#000000')
-        self.attributes_alpha = 0.7  # Store for reference, but tkinter Frame doesn't support this directly
-        
-        # Create centered dialog container
-        dialog_frame = tk.Frame(self, bg='#2d2d2d', bd=2, relief='raised')
-        dialog_frame.place(relx=0.5, rely=0.5, anchor='center', width=500, height=280)
+        # Configure the dialog frame itself (centered box)
+        self.configure(bg='#2d2d2d', bd=2, relief='raised')
+        self.place(relx=0.5, rely=0.5, anchor='center', width=600, height=450)
         
         # Title
-        title_label = tk.Label(dialog_frame, text=title, font=("Segoe UI", 12, "bold"), bg='#2d2d2d', fg='#ffffff')
+        title_label = tk.Label(self, text=title, font=("Segoe UI", 12, "bold"), bg='#2d2d2d', fg='#ffffff')
         title_label.pack(pady=(20, 10))
         
         # Message
-        msg_label = tk.Label(dialog_frame, text=message, wraplength=450, justify="left", font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff')
-        msg_label.pack(pady=(0, 20), padx=20)
+        # Message
+        msg_label = tk.Label(self, text=message, wraplength=550, justify="center", anchor="center", font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff')
+        msg_label.pack(pady=(0, 20), padx=20, expand=True, fill="both")
         
         # Timer label
-        self.timer_label = tk.Label(dialog_frame, text=f"This dialog will close in {self.remaining} seconds...", font=FONT_ITALIC, bg='#2d2d2d', fg='#cccccc')
+        self.timer_label = tk.Label(self, text=f"You can close this dialog in {self.remaining} seconds...", font=FONT_ITALIC, bg='#2d2d2d', fg='#cccccc')
         self.timer_label.pack(pady=10)
         
         # Checkbox
         self.dont_show_var = tk.BooleanVar(value=False)
-        self.check = tk.Checkbutton(dialog_frame, text="Don't show this again", variable=self.dont_show_var, font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff', selectcolor='#2d2d2d', activebackground='#2d2d2d', activeforeground='#ffffff')
+        self.check = tk.Checkbutton(self, text="Don't show this again", variable=self.dont_show_var, font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff', selectcolor='#2d2d2d', activebackground='#2d2d2d', activeforeground='#ffffff')
         self.check.pack(pady=10)
         
         # OK button (disabled initially)
-        self.ok_btn = tk.Button(dialog_frame, text="OK", command=self.on_ok, state="disabled", font=FONT_MAIN, relief="flat", cursor="hand2", width=10, bg='#0e639c', fg='#ffffff')
+        self.ok_btn = tk.Button(self, text="OK", command=self.on_ok, state="disabled", font=FONT_MAIN, relief="flat", cursor="hand2", width=10, bg='#0e639c', fg='#ffffff')
         self.ok_btn.pack(pady=15)
         
         # Disable interaction with parent
@@ -149,7 +142,7 @@ class TimedWarningDialog(tk.Frame):
     
     def update_timer(self):
         if self.remaining > 0:
-            self.timer_label.config(text=f"This dialog will close in {self.remaining} seconds...")
+            self.timer_label.config(text=f"You can close this dialog in {self.remaining} seconds...")
             self.remaining -= 1
             self.after(1000, self.update_timer)
         else:
@@ -173,16 +166,6 @@ class LRCApp(TkinterDnD.Tk):
         
         self.current_theme = self.config.get('theme', 'Dark')
         self.colors = THEMES[self.current_theme]
-        
-        # Set window icon
-        try:
-            icon_path = os.path.join(os.path.dirname(__file__), 'lyridanlogo.jpg')
-            if os.path.exists(icon_path):
-                icon_image = Image.open(icon_path)
-                icon_photo = ImageTk.PhotoImage(icon_image)
-                self.iconphoto(True, icon_photo)
-        except Exception as e:
-            print(f"Could not load icon: {e}")
         
         self.apply_global_palette()
         

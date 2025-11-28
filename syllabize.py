@@ -501,7 +501,7 @@ def process_line(line, separator="+", romanize=False, capitalize=False, language
             # otherwise use the detected lang (which might be 'other' -> english)
             syllabized_words.append(syllabize_word(word, separator, language=lang))
         
-    return f"{timestamp} {' '.join(syllabized_words)}"
+    return ' '.join(syllabized_words)
 
 def main():
     input_file = 'test.lrc'
