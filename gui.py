@@ -640,7 +640,7 @@ class OptionsFrame(tk.Frame):
         footer_frame = tk.Frame(self.content_frame)
         footer_frame.pack(side="bottom", pady=20)
         
-        tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025", font=("Segoe UI", 9)).pack()
+        tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025, version 1.0.0", font=("Segoe UI", 9)).pack()
         
         github_link = tk.Label(footer_frame, text="GitHub", font=("Segoe UI", 9, "underline"), fg="#007acc", cursor="hand2")
         github_link.pack()
