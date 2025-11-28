@@ -1,8 +1,8 @@
-# Lyridan - Build Instructions
+## Lyridan - Build Instructions
 
 This folder contains all files needed to build Lyridan into a single executable.
 
-## Required Files
+### Required Files
 
 - `gui.py` - Main GUI application
 - `syllabize.py` - Core syllabization and Rocksmith export logic
@@ -13,7 +13,7 @@ This folder contains all files needed to build Lyridan into a single executable.
 - `build.bat` - Automated build script (Windows)
 - `create_icon.py` - Icon conversion utility (optional, used to generate .ico from .jpg)
 
-## Prerequisites
+### Prerequisites
 
 Install the required Python packages:
 
@@ -21,26 +21,26 @@ Install the required Python packages:
 pip install tkinterdnd2 pykakasi transliterate pyphen pyinstaller
 ```
 
-## Building the Executable
+### Building the Executable
 
-### Option 1: Use the build script (recommended)
+#### Option 1: Use the build script (recommended)
 Simply double-click `build.bat` or run:
 ```bash
 build.bat
 ```
 
-### Option 2: Manual build
+#### Option 2: Manual build
 Run the PyInstaller command:
 ```bash
 pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --add-data "English.txt;." --add-data "lyridanlogo.jpg;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate "gui.py"
 ```
 
-## Output
+### Output
 
 The compiled executable will be located in:
 - `dist/Lyridan.exe`
 
-## Configuration File
+### Configuration File
 
 Lyridan stores user preferences in:
 - `%APPDATA%\Lyridan\options.lrdn`
@@ -48,3 +48,4 @@ Lyridan stores user preferences in:
 This includes:
 - Theme preference (Dark / Light / Lyridan Dark)
 - Warning dialog acknowledgments
+
