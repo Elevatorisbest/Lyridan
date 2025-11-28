@@ -3,6 +3,8 @@ from tkinter import filedialog, scrolledtext, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import syllabize
 import os
+import webbrowser
+from config import Config
 
 # Theme Definitions
 THEMES = {
@@ -78,6 +80,68 @@ class ToolTip(object):
             self.tooltip.destroy()
             self.tooltip = None
 
+class TimedWarningDialog(tk.Frame):
+    def __init__(self, parent, title, message, duration, config_key, config):
+        super().__init__(parent)
+        self.config = config
+        self.config_key = config_key
+        self.duration = duration
+        self.remaining = duration
+        self.parent = parent
+        
+        # Configure overlay to cover entire parent
+        self.place(relx=0, rely=0, relwidth=1, relheight=1)
+        
+        # Semi-transparent dark overlay background
+        self.configure(bg='#000000')
+        self.attributes_alpha = 0.7  # Store for reference, but tkinter Frame doesn't support this directly
+        
+        # Create centered dialog container
+        dialog_frame = tk.Frame(self, bg='#2d2d2d', bd=2, relief='raised')
+        dialog_frame.place(relx=0.5, rely=0.5, anchor='center', width=500, height=280)
+        
+        # Title
+        title_label = tk.Label(dialog_frame, text=title, font=("Segoe UI", 12, "bold"), bg='#2d2d2d', fg='#ffffff')
+        title_label.pack(pady=(20, 10))
+        
+        # Message
+        msg_label = tk.Label(dialog_frame, text=message, wraplength=450, justify="left", font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff')
+        msg_label.pack(pady=(0, 20), padx=20)
+        
+        # Timer label
+        self.timer_label = tk.Label(dialog_frame, text=f"This dialog will close in {self.remaining} seconds...", font=FONT_ITALIC, bg='#2d2d2d', fg='#cccccc')
+        self.timer_label.pack(pady=10)
+        
+        # Checkbox
+        self.dont_show_var = tk.BooleanVar(value=False)
+        self.check = tk.Checkbutton(dialog_frame, text="Don't show this again", variable=self.dont_show_var, font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff', selectcolor='#2d2d2d', activebackground='#2d2d2d', activeforeground='#ffffff')
+        self.check.pack(pady=10)
+        
+        # OK button (disabled initially)
+        self.ok_btn = tk.Button(dialog_frame, text="OK", command=self.on_ok, state="disabled", font=FONT_MAIN, relief="flat", cursor="hand2", width=10, bg='#0e639c', fg='#ffffff')
+        self.ok_btn.pack(pady=15)
+        
+        # Disable interaction with parent
+        self.grab_set()
+        self.focus_set()
+        
+        # Start countdown
+        self.update_timer()
+    
+    def update_timer(self):
+        if self.remaining > 0:
+            self.timer_label.config(text=f"This dialog will close in {self.remaining} seconds...")
+            self.remaining -= 1
+            self.after(1000, self.update_timer)
+        else:
+            self.timer_label.config(text="You may now close this dialog.")
+            self.ok_btn.config(state="normal", bg='#1177bb')
+    
+    def on_ok(self):
+        if self.dont_show_var.get():
+            self.config.set(self.config_key, False)
+        self.destroy()
+
 class LRCApp(TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
@@ -85,7 +149,10 @@ class LRCApp(TkinterDnD.Tk):
         self.geometry("1000x700")
         self.minsize(900, 600)
         
-        self.current_theme = "Dark"
+        # Initialize config
+        self.config = Config()
+        
+        self.current_theme = self.config.get('theme', 'Dark')
         self.colors = THEMES[self.current_theme]
         
         self.apply_global_palette()
@@ -332,7 +399,7 @@ class LRCFrame(tk.Frame):
             sample_text = "".join(self.current_lines[:10])
             lang = syllabize.detect_language(sample_text)
             if lang == 'mixed':
-                messagebox.showwarning("Mixed Content", "Detected both Japanese and Russian characters. Processing might be mixed.")
+                messagebox.showwarning("Mixed Content", "Detected both Japanese and Russian characters. Processing might be inaccurate.")
             self.process_current_file()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
@@ -366,6 +433,22 @@ class LRCFrame(tk.Frame):
     def save_file(self):
         if not self.current_file_path:
             return
+        
+        # Show warning if enabled
+        if self.controller.config.get('warnings.lrc_save', True):
+            dialog = TimedWarningDialog(
+                self.controller.container, 
+                "Important Information", 
+                "This tool is not intended as a complete replacement of syllabization and romanization/transliteration.\n\n"
+                "Incorrect syllabization and romanization/transliteration may occur.\n\n"
+                "Please verify the accuracy of the results prior to implementing it in a Rocksmith chart.",
+                5,
+                'warnings.lrc_save',
+                self.controller.config
+            )
+            # Wait for dialog to close
+            self.wait_window(dialog)
+        
         base = os.path.splitext(os.path.basename(self.current_file_path))[0]
         output_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")], initialfile=f"{base} Syllabized.txt")
         if output_path:
@@ -405,7 +488,7 @@ class RocksmithFrame(tk.Frame):
         self.ttml_entry.pack(fill="x", pady=5)
         tk.Button(self.content_frame, text="Browse...", command=self.browse_ttml, font=FONT_MAIN, relief="flat", cursor="hand2").pack(anchor="e", pady=(0, 20))
         
-        tk.Label(self.content_frame, text="Rocksmith Arrangement File with beatmap (eg. \"PART REAL_GUITAR_RS2.xml\"):", font=FONT_BOLD).pack(anchor="w")
+        tk.Label(self.content_frame, text="Rocksmith Arrangement File synced to the beat (eg. \"PART REAL_GUITAR_RS2.xml\"):", font=FONT_BOLD).pack(anchor="w")
         self.beatmap_entry = tk.Entry(self.content_frame, width=50, font=FONT_MAIN, relief="flat", bd=1)
         self.beatmap_entry.pack(fill="x", pady=5)
         tk.Button(self.content_frame, text="Browse...", command=self.browse_beatmap, font=FONT_MAIN, relief="flat", cursor="hand2").pack(anchor="e", pady=(0, 20))
@@ -419,7 +502,7 @@ class RocksmithFrame(tk.Frame):
         self.empty_measure_var = tk.BooleanVar(value=False)
         self.empty_measure_check = tk.Checkbutton(self.content_frame, text="Account For 1st Empty Measure", variable=self.empty_measure_var, font=FONT_MAIN)
         self.empty_measure_check.pack(anchor="w", pady=5)
-        ToolTip(self.empty_measure_check, "Accounts for an empty measure at the beginning of the chart, often used for count-ins and required by charting standards. Adds the duration of one measure to the offset.")
+        ToolTip(self.empty_measure_check, "Accounts for an empty measure at the beginning of the chart which is required by charting standards. Adds the duration of one measure to the offset.")
         
         self.gen_btn = tk.Button(self.content_frame, text="Generate Rocksmith XML", command=self.generate, font=FONT_SUBHEADER, height=2, relief="flat", cursor="hand2")
         self.gen_btn.pack(fill="x", pady=30)
@@ -483,6 +566,21 @@ class RocksmithFrame(tk.Frame):
                 return
             output_path = filedialog.asksaveasfilename(defaultextension=".xml", filetypes=[("XML Files", "*.xml")], initialfile="vocals_rs.xml")
             if output_path:
+                # Show warning if enabled
+                if self.controller.config.get('warnings.rocksmith_export', True):
+                    dialog = TimedWarningDialog(
+                        self.controller.container,
+                        "Important Information",
+                        "This tool is not intended as a complete replacement of creating an accurate Rocksmith Vocal Arrangement file.\n\n"
+                        "It is recommended to use this tool as a starting point and manually adjust the timing and syllabization as needed.\n\n"
+                        "Romanization may be incorrect, and syllabizations and timing accuracy for words or syllabes are dependent on the provided lyric file, and can vary by song or source.\n\n"
+                        "Please verify the accuracy of the results prior to implementing it in a Rocksmith chart.",
+                        10,
+                        'warnings.rocksmith_export',
+                        self.controller.config
+                    )
+                    self.wait_window(dialog)
+                
                 success = syllabize.export_rocksmith_xml(data, output_path, offset, beatmap, empty_measure)
                 if success:
                     self.status_label.config(text="Export Successful!", fg="green")
@@ -513,13 +611,27 @@ class OptionsFrame(tk.Frame):
         
         tk.Label(self.content_frame, text="Options", font=FONT_HEADER).pack(pady=(0, 30))
         
+        # Theme section
         tk.Label(self.content_frame, text="Theme", font=FONT_BOLD).pack(pady=(20, 10))
-        
         self.theme_var = tk.StringVar(value=self.controller.current_theme)
         tk.Radiobutton(self.content_frame, text="Dark", variable=self.theme_var, value="Dark", command=self.change_theme, font=FONT_MAIN).pack()
         tk.Radiobutton(self.content_frame, text="Light", variable=self.theme_var, value="Light", command=self.change_theme, font=FONT_MAIN).pack()
         
-        tk.Label(self.content_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025", font=("Segoe UI", 9)).pack(side="bottom", pady=20)
+        # Warnings section
+        tk.Label(self.content_frame, text="Warnings", font=FONT_BOLD).pack(pady=(20, 10))
+        self.reset_btn = tk.Button(self.content_frame, text="Reset Warning Acknowledgments", 
+                                     command=self.reset_warnings, font=FONT_MAIN, relief="flat", cursor="hand2")
+        self.reset_btn.pack(pady=10)
+        
+        # Footer with GitHub link
+        footer_frame = tk.Frame(self.content_frame)
+        footer_frame.pack(side="bottom", pady=20)
+        
+        tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025", font=("Segoe UI", 9)).pack()
+        
+        github_link = tk.Label(footer_frame, text="GitHub", font=("Segoe UI", 9, "underline"), fg="#007acc", cursor="hand2")
+        github_link.pack()
+        github_link.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/Elevatorisbest/Lyridan"))
 
     def update_theme(self, colors):
         self.configure(bg=colors["bg"])
@@ -529,9 +641,15 @@ class OptionsFrame(tk.Frame):
         def update_recursive(widget):
             try:
                 if isinstance(widget, (tk.Label, tk.Radiobutton)):
-                    widget.configure(bg=colors["bg"], fg=colors["fg"], selectcolor=colors["bg"], activebackground=colors["bg"], activeforeground=colors["fg"])
+                    # Preserve GitHub link color
+                    if hasattr(widget, 'cget') and 'underline' in str(widget.cget('font')):
+                        widget.configure(bg=colors["bg"])
+                    else:
+                        widget.configure(bg=colors["bg"], fg=colors["fg"], selectcolor=colors["bg"], activebackground=colors["bg"], activeforeground=colors["fg"])
                 elif isinstance(widget, tk.Button):
                     widget.configure(bg=colors["btn_bg"], fg=colors["btn_fg"], activebackground=colors["btn_active_bg"], activeforeground=colors["btn_active_fg"])
+                elif isinstance(widget, tk.Frame):
+                    widget.configure(bg=colors["bg"])
             except: pass
             for child in widget.winfo_children():
                 update_recursive(child)
@@ -545,7 +663,12 @@ class OptionsFrame(tk.Frame):
         self.controller.show_frame(self.return_to)
 
     def change_theme(self):
+        self.controller.config.set('theme', self.theme_var.get())
         self.controller.apply_theme(self.theme_var.get())
+    
+    def reset_warnings(self):
+        self.controller.config.reset_warnings()
+        messagebox.showinfo("Success", "Warning acknowledgments have been reset.")
 
 if __name__ == "__main__":
     app = LRCApp()

@@ -1,35 +1,40 @@
 import re
-import xml.etree.ElementTree as ET
 import json
-try:
-    import pykakasi
-    kks = pykakasi.kakasi()
-except ImportError:
-    kks = None
+import xml.etree.ElementTree as ET
+import os
 
+# Try to import pykakasi for Japanese romanization
+kks = None
 try:
-    import transliterate
+    from pykakasi import kakasi
+    kks = kakasi()
+    kks.setMode('H', 'a')
+    kks.setMode('K', 'a')
+    kks.setMode('J', 'a')
+except ImportError:
+    pass
+
+# Load English syllabification dictionary
+english_dict = {}
+try:
+    dict_path = os.path.join(os.path.dirname(__file__), 'English.txt')
+    if os.path.exists(dict_path):
+        with open(dict_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and '•' in line:
+                    # Store as lowercase key -> syllabified value
+                    english_dict[line.replace('•', '').lower()] = line
+except Exception as e:
+    print(f"Warning: Could not load English.txt: {e}")
+
+# Try to import transliterate for Russian
+HAS_TRANSLITERATE = False
+try:
     from transliterate import translit
     HAS_TRANSLITERATE = True
 except ImportError:
-    HAS_TRANSLITERATE = False
-
-try:
-    import pyphen
-    try:
-        # Try en_US first, then fallback to en
-        try:
-            dic = pyphen.Pyphen(lang='en_US')
-        except:
-            dic = pyphen.Pyphen(lang='en')
-    except Exception as e:
-        with open("pyphen_debug.log", "w") as f:
-            f.write(f"Error initializing Pyphen: {e}\n")
-        dic = None
-except ImportError:
-    with open("pyphen_debug.log", "w") as f:
-        f.write("ImportError: Could not import pyphen\n")
-    dic = None
+    pass
 
 def detect_language(text):
     """
@@ -375,63 +380,6 @@ def syllabize_russian_word(word, separator="+"):
     return separator.join(syllables)
 
 def syllabize_english_word(word, separator="+"):
-    exceptions = {
-        "around": "a+round",
-        "crazy": "cra+zy",
-        "hello": "hel+lo",
-        "quoted": "quo+ted",
-        "better": "bet+ter",
-        "proper": "prop+er",
-        "english": "eng+lish",
-        "don't": "don't",
-        "can't": "can't",
-        "won't": "won't",
-        "didn't": "did+n't",
-        "couldn't": "could+n't",
-        "shouldn't": "should+n't",
-        "wouldn't": "would+n't",
-        "isn't": "is+n't",
-        "aren't": "aren't",
-        "wasn't": "was+n't",
-        "weren't": "weren't",
-        "hasn't": "has+n't",
-        "haven't": "have+n't",
-        "hadn't": "had+n't",
-        "doesn't": "does+n't",
-        "it's": "it's",
-        "that's": "that's",
-        "there's": "there's",
-        "here's": "here's",
-        "what's": "what's",
-        "who's": "who's",
-        "where's": "where's",
-        "when's": "when's",
-        "why's": "why's",
-        "how's": "how's",
-        "i'm": "i'm",
-        "you're": "you're",
-        "he's": "he's",
-        "she's": "she's",
-        "we're": "we're",
-        "they're": "they're",
-        "i've": "i've",
-        "you've": "you've",
-        "we've": "we've",
-        "they've": "they've",
-        "i'd": "i'd",
-        "you'd": "you'd",
-        "he'd": "he'd",
-        "she'd": "she'd",
-        "we'd": "we'd",
-        "they'd": "they'd",
-        "i'll": "i'll",
-        "you'll": "you'll",
-        "he'll": "he'll",
-        "she'll": "she'll",
-        "we'll": "we'll",
-        "they'll": "they'll"
-    }
-    
     # Strip punctuation
     match = re.match(r'^([^\w]*)(.*?)([^\w]*)$', word)
     if not match:
@@ -444,35 +392,24 @@ def syllabize_english_word(word, separator="+"):
         
     lower_core = core.lower()
     
-    if lower_core in exceptions:
-        syl_core = exceptions[lower_core]
-        # Restore capitalization if needed (simple case)
+    # Look up in English.txt dictionary
+    if lower_core in english_dict:
+        syllabified = english_dict[lower_core]
+        # Replace • with the desired separator
+        syllabified = syllabified.replace('•', separator)
+        
+        # Preserve capitalization
         if core[0].isupper():
-            syl_core = syl_core[0].upper() + syl_core[1:]
-        syl_core = syl_core.replace('+', separator)
-        return f"{prefix}{syl_core}{suffix}"
-
-    if not dic:
-        return word
-        
-    # Handle internal hyphens/punctuation by splitting and processing parts
-    # e.g. "Word-with-hyphens" -> "Word", "with", "hyphens"
-    if '-' in core:
-        parts = core.split('-')
-        processed_parts = []
-        for part in parts:
-            if not part:
-                processed_parts.append("")
-                continue
-            # Recursively process parts (but avoid infinite recursion if no change)
-            # Actually, just pyphen the parts
-            syl_part = dic.inserted(part).replace('-', separator)
-            processed_parts.append(syl_part)
-        syl_core = "-".join(processed_parts)
-    else:
-        syl_core = dic.inserted(core).replace('-', separator)
-        
-    return f"{prefix}{syl_core}{suffix}"
+            # Simple capitalization - capitalize first letter
+            syllabified = syllabified[0].upper() + syllabified[1:] if len(syllabified) > 0 else syllabified
+        if core.isupper() and len(core) > 1:
+            # All caps - capitalize all
+            syllabified = syllabified.upper()
+            
+        return f"{prefix}{syllabified}{suffix}"
+    
+    # If not found in dictionary, return as-is
+    return word
 
 def syllabize_word(word, separator="+", language="japanese"):
     if language == 'russian':

@@ -1,0 +1,5 @@
+tkinterdnd2
+pykakasi
+transliterate
+pyphen
+pyinstaller
