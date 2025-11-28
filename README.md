@@ -1,5 +1,7 @@
 # Lyridan
 ![lyridanlogo](https://github.com/user-attachments/assets/335da193-0a28-4bf8-8848-3dcc610e3332)
+<img width="1000" height="700" alt="Example lrc romanization and syllabization" src="https://github.com/user-attachments/assets/6e3e6956-598f-4cd2-9228-8e58887d355d" />
+
 
 
 ## What is it?
@@ -94,6 +96,7 @@ Lyridan stores user preferences in:
 This includes:
 - Theme preference (Dark / Light / Lyridan Dark)
 - Warning dialog acknowledgments
+
 
 
 
