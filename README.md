@@ -1,6 +1,7 @@
 # Lyridan
 ![lyridanlogo](https://github.com/user-attachments/assets/335da193-0a28-4bf8-8848-3dcc610e3332)
 
+
 ## What is it?
 Lyridan is an experimental program that I created, originally to have a way of syllabizing and romanizing Japanese lyrics for my Rocksmith charts.
 
@@ -23,7 +24,7 @@ It ended up evolving into a humble program that also lets you create roughly ali
 - **Japanese** (🇯🇵)
 - **Russian** (🇷🇺)
 
-### Export into a text file ready for import into external programs like Ultra Star Creator
+### Export to a text file ready for import into external programs like Ultra Star Creator
 
 - Syllabe separator can be replaced with any character or set of characters you wish to use up to 20 characters long.
 
@@ -93,5 +94,6 @@ Lyridan stores user preferences in:
 This includes:
 - Theme preference (Dark / Light / Lyridan Dark)
 - Warning dialog acknowledgments
+
 
 
