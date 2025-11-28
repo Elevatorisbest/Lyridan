@@ -5,6 +5,7 @@ import syllabize
 import os
 import webbrowser
 from config import Config
+from PIL import Image, ImageTk
 
 # Theme Definitions
 THEMES = {
@@ -43,6 +44,24 @@ THEMES = {
         "highlight": "#007acc",
         "select_bg": "#add6ff",
         "border": "#cccccc"
+    },
+    "Lyridan Dark": {
+        "bg": "#000000",
+        "fg": "#fbeb4e",
+        "text_bg": "#0a0a0a",
+        "text_fg": "#ffffff",
+        "entry_bg": "#1a1a1a",
+        "entry_fg": "#fbeb4e",
+        "btn_bg": "#fbeb4e",
+        "btn_fg": "#000000",
+        "btn_active_bg": "#fff176",
+        "btn_active_fg": "#000000",
+        "frame_bg": "#0a0a0a",
+        "label_bg": "#0a0a0a",
+        "label_fg": "#fbeb4e",
+        "highlight": "#fbeb4e",
+        "select_bg": "#333333",
+        "border": "#fbeb4e"
     }
 }
 
@@ -154,6 +173,16 @@ class LRCApp(TkinterDnD.Tk):
         
         self.current_theme = self.config.get('theme', 'Dark')
         self.colors = THEMES[self.current_theme]
+        
+        # Set window icon
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), 'lyridanlogo.jpg')
+            if os.path.exists(icon_path):
+                icon_image = Image.open(icon_path)
+                icon_photo = ImageTk.PhotoImage(icon_image)
+                self.iconphoto(True, icon_photo)
+        except Exception as e:
+            print(f"Could not load icon: {e}")
         
         self.apply_global_palette()
         
@@ -616,6 +645,7 @@ class OptionsFrame(tk.Frame):
         self.theme_var = tk.StringVar(value=self.controller.current_theme)
         tk.Radiobutton(self.content_frame, text="Dark", variable=self.theme_var, value="Dark", command=self.change_theme, font=FONT_MAIN).pack()
         tk.Radiobutton(self.content_frame, text="Light", variable=self.theme_var, value="Light", command=self.change_theme, font=FONT_MAIN).pack()
+        tk.Radiobutton(self.content_frame, text="Lyridan Dark", variable=self.theme_var, value="Lyridan Dark", command=self.change_theme, font=FONT_MAIN).pack()
         
         # Warnings section
         tk.Label(self.content_frame, text="Warnings", font=FONT_BOLD).pack(pady=(20, 10))
