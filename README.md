@@ -6,9 +6,9 @@
 
 
 ## What is it?
-Lyridan is an experimental program that I created, originally to have a way of syllabizing and romanizing Japanese lyrics for my Rocksmith charts.
+Lyridan is an experimental program that syllabizes and romanizes/transliterates .lrc lyric files. 
 
-It ended up evolving into a humble program that also lets you create roughly aligned and syllabized Rocksmith Vocal .XML arrangements ready to be imported into the chart and game from a .ttml file (acquired from eg. Apple Music).
+It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML arrangement files ready to be imported into a chart and game from a .ttml file (acquired from ex. Apple Music).
 
 ## Features
 
@@ -70,6 +70,11 @@ This folder contains all files needed to build Lyridan into a single executable.
 Install the required Python packages:
 
 ```bash
+pip install requirements.txt
+```
+or
+
+```bash
 pip install tkinterdnd2 pykakasi transliterate pyphen pyinstaller
 ```
 
@@ -101,8 +106,12 @@ This includes:
 - Theme preference (Dark / Light / Lyridan Dark)
 - Warning dialog acknowledgments
 
+## Disclaimer
 
+I wrote this program using Google's newly released Antigravity IDE, where I generated basically all of the code using AI, because I unfortunately have next to no coding skills. I at no point claim that I am good at coding, and while I did my best to find and fix any bugs or oddities, they can still occur. Any help or contributions to improve the program via pull requests are very welcome and I will be very thankful for them if you choose to contribute to it.
 
+This also means that this program is to be used merely as an assistance tool or an experiment when creating a Rocksmith chart, and is not meant to fully automate or replace the process of adding high quality lyrics to the chart.
 
+## Credits
 
-
+This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
