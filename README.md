@@ -45,7 +45,10 @@ It ended up evolving into a humble program that also lets you create roughly ali
 
 ## Install
 
-1. 
+#### 1. Ensure that you have Python installed on your PC (Python 3.8 at minimum).
+#### 2. Download the newest release of Lyridan from the Releases page of this repository.
+#### 3. Place Lyridan.exe where you wish to use it (eg. Downloads folder, Desktop, etc.)
+#### 4. Launch the executable.
 
 ## Build Instructions
 
@@ -97,6 +100,7 @@ Lyridan stores user preferences in:
 This includes:
 - Theme preference (Dark / Light / Lyridan Dark)
 - Warning dialog acknowledgments
+
 
 
 
