@@ -1,5 +1,27 @@
-tkinterdnd2
-pykakasi
-transliterate
-pyphen
-pyinstaller
+# Lyridan Dependencies
+
+## Required Python Packages
+
+Install all required packages using:
+
+```bash
+pip install -r requirements.txt
+```
+
+Or install individually:
+
+```bash
+pip install tkinterdnd2
+pip install pykakasi
+pip install transliterate
+pip install pyphen
+pip install pyinstaller
+```
+
+## Package Descriptions
+
+- **tkinterdnd2**: Drag & drop support for Tkinter
+- **pykakasi**: Japanese romanization (Hiragana/Katakana/Kanji to Romaji)
+- **transliterate**: Russian transliteration (Cyrillic to Latin)
+- **pyphen**: Fallback for English syllabification (not actively used, English.txt is primary)
+- **pyinstaller**: Compiles Python scripts into standalone executables
