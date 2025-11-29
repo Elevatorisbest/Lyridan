@@ -47,7 +47,7 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 ⚠️ Lyridan has been made and tested only on Windows. I have no idea if it can run on Linux.
 
-#### 1. Ensure that you have Python installed on your PC (Python 3.8 at minimum).
+#### 1. Ensure that you have the newest version of Python installed on your PC.
 #### 2. Download the newest release of Lyridan from the Releases page of this repository.
 #### 3. Place Lyridan.exe where you wish to use it (eg. Downloads folder, Desktop, etc.)
 #### 4. Launch the executable.
@@ -115,5 +115,6 @@ This also means that this program is to be used merely as an assistance tool or 
 ## Credits
 
 This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
 
