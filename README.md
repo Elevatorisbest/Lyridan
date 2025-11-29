@@ -52,9 +52,12 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 #### 3. Place Lyridan.exe where you wish to use it (eg. Downloads folder, Desktop, etc.)
 #### 4. Launch the executable.
 
+ℹ️ You may receive a SmartScreen warning telling you to not launch the executable. This is only because I did not pay Microsoft money to sign the app executable (or something like that based on other app developers on Github). It is safe to launch and it never connects to the internet.
+
 ## Build Instructions
 
-This folder contains all files needed to build Lyridan into a single executable.
+1. Clone the repository or click the green "```Code```" button above the file list and select "```Download ZIP```".
+2. Place the contents in an empty folder where you wish to build Lyridan.
 
 ### Required Files
 
@@ -115,6 +118,7 @@ This also means that this program is to be used merely as an assistance tool or 
 ## Credits
 
 This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
 
 
