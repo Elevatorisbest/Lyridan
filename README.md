@@ -43,7 +43,7 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 
 
-## Install
+## Installation
 
 ⚠️ Lyridan has been made and tested only on Windows. I have no idea if it can run on Linux.
 
@@ -118,6 +118,7 @@ This also means that this program is to be used merely as an assistance tool or 
 ## Credits
 
 This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
 
 
