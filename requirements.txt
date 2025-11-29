@@ -3,4 +3,3 @@ pykakasi
 transliterate
 pyphen
 pyinstaller
-Pillow

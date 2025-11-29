@@ -3,6 +3,7 @@ from tkinter import filedialog, scrolledtext, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import syllabize
 import os
+import sys
 import webbrowser
 from config import Config
 
@@ -160,6 +161,22 @@ class LRCApp(TkinterDnD.Tk):
         self.title("Lyridan")
         self.geometry("1000x700")
         self.minsize(900, 600)
+        
+        # Set window icon
+        try:
+            # Get the correct base path for both script and frozen executable
+            if getattr(sys, 'frozen', False):
+                # Running as compiled executable
+                base_path = sys._MEIPASS
+            else:
+                # Running as script
+                base_path = os.path.dirname(__file__)
+            
+            icon_path = os.path.join(base_path, 'lyridanlogo.ico')
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
+        except Exception as e:
+            print(f"Could not load icon: {e}")
         
         # Initialize config
         self.config = Config()
