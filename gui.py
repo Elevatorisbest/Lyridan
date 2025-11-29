@@ -8,39 +8,61 @@ import webbrowser
 from config import Config
 
 # Theme Definitions
+# Key Descriptions:
+# bg: Main window background color
+# fg: Default text color (high contrast recommended)
+# text_bg: Background color for text areas (scrolledtext)
+# text_fg: Text color for text areas
+# entry_bg: Background color for entry widgets
+# entry_fg: Text color for entry widgets
+# btn_bg: Button background color
+# btn_fg: Button text color
+# btn_active_bg: Button background color when hovered/active
+# btn_active_fg: Button text color when hovered/active
+# frame_bg: Background color for inner frames (e.g., LrcFrame, RsFrame)
+# label_bg: Background color for labels (usually matches frame_bg)
+# label_fg: Text color for labels
+# highlight: Color for focus highlights or accents
+# select_bg: Background color for selected text
+# border: Border color for widgets
+
+# Platform-specific button text color (white on Windows, black on MacOS)
+IS_MACOS = sys.platform == 'darwin'
+BUTTON_TEXT_COLOR = "#000000" if IS_MACOS else "#ffffff"
+
 THEMES = {
     "Dark": {
         "bg": "#1e1e1e",
-        "fg": "#cccccc",
+        "fg": "#ffffff",          # Changed from #cccccc for better contrast
         "text_bg": "#252526",
         "text_fg": "#d4d4d4",
         "entry_bg": "#3c3c3c",
         "entry_fg": "#cccccc",
         "btn_bg": "#0e639c",
-        "btn_fg": "#ffffff",
+        "btn_fg": BUTTON_TEXT_COLOR,
         "btn_active_bg": "#1177bb",
-        "btn_active_fg": "#ffffff",
+        "btn_active_fg": BUTTON_TEXT_COLOR,
         "frame_bg": "#252526",
         "label_bg": "#252526",
-        "label_fg": "#cccccc",
+        "label_fg": "#ffffff",    # Changed from #cccccc for better contrast
         "highlight": "#007fd4",
         "select_bg": "#264f78",
         "border": "#3c3c3c"
     },
     "Light": {
         "bg": "#f0f0f0",
-        "fg": "#333333",
+        "fg": "#000000",          # Changed from #333333 for better contrast
         "text_bg": "#ffffff",
         "text_fg": "#333333",
         "entry_bg": "#ffffff",
         "entry_fg": "#333333",
         "btn_bg": "#007acc",
-        "btn_fg": "#ffffff",
+        "btn_fg": BUTTON_TEXT_COLOR,
         "btn_active_bg": "#005f9e",
-        "btn_active_fg": "#ffffff",
+        "btn_active_fg": BUTTON_TEXT_COLOR,
         "frame_bg": "#ffffff",
         "label_bg": "#ffffff",
-        "label_fg": "#333333",
+        "label_fg": "#000000",    # Changed from #333333 for better contrast
         "highlight": "#007acc",
         "select_bg": "#add6ff",
         "border": "#cccccc"
@@ -126,12 +148,21 @@ class TimedWarningDialog(tk.Frame):
         self.timer_label.pack(pady=10)
         
         # Checkbox
+        # Checkbox
+        checkbox_fg = "#ffffff" # Always white on dark background
         self.dont_show_var = tk.BooleanVar(value=False)
-        self.check = tk.Checkbutton(self, text="Don't show this again", variable=self.dont_show_var, font=FONT_MAIN, bg='#2d2d2d', fg='#ffffff', selectcolor='#2d2d2d', activebackground='#2d2d2d', activeforeground='#ffffff')
+        self.check = tk.Checkbutton(self, text="Don't show this again", variable=self.dont_show_var, font=FONT_MAIN, 
+                                    bg='#2d2d2d', fg=checkbox_fg, 
+                                    selectcolor='#2d2d2d', activebackground='#2d2d2d', activeforeground=checkbox_fg,
+                                    highlightthickness=0, bd=0, state="disabled",
+                                    disabledforeground="#aaaaaa")
         self.check.pack(pady=10)
         
         # OK button (disabled initially)
-        self.ok_btn = tk.Button(self, text="OK", command=self.on_ok, state="disabled", font=FONT_MAIN, relief="flat", cursor="hand2", width=10, bg='#0e639c', fg='#ffffff')
+        # Grayed out style for disabled state
+        self.ok_btn = tk.Button(self, text="OK", command=self.on_ok, state="disabled", font=FONT_MAIN, relief="flat", cursor="hand2", width=10, 
+                                bg='#444444', fg='#888888',
+                                highlightthickness=0, bd=0, highlightbackground='#2d2d2d')
         self.ok_btn.pack(pady=15)
         
         # Disable interaction with parent
@@ -148,7 +179,8 @@ class TimedWarningDialog(tk.Frame):
             self.after(1000, self.update_timer)
         else:
             self.timer_label.config(text="You may now close this dialog.")
-            self.ok_btn.config(state="normal", bg='#1177bb')
+            self.check.config(state="normal")
+            self.ok_btn.config(state="normal", bg='#0e639c', fg=BUTTON_TEXT_COLOR)
     
     def on_ok(self):
         if self.dont_show_var.get():
@@ -236,12 +268,23 @@ class LandingPage(tk.Frame):
         self.controller = controller
         self.configure(bg=controller.colors["bg"])
         
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        # Top Bar
+        self.top_bar = tk.Frame(self, bg=controller.colors["bg"])
+        self.top_bar.pack(fill="x", padx=20, pady=15)
+        
+        self.options_btn = tk.Button(self.top_bar, text="Options", command=self.open_options, font=FONT_MAIN, relief="flat", padx=10, cursor="hand2")
+        self.options_btn.pack(side="right")
+        
+        # Content Frame
+        self.content_frame = tk.Frame(self, bg=controller.colors["bg"])
+        self.content_frame.pack(fill="both", expand=True)
+        
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_columnconfigure(1, weight=1)
+        self.content_frame.grid_rowconfigure(0, weight=1)
         
         # Left Side
-        self.lrc_frame = tk.Frame(self, bg=controller.colors["frame_bg"], bd=0)
+        self.lrc_frame = tk.Frame(self.content_frame, bg=controller.colors["frame_bg"], bd=0)
         self.lrc_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         
         self.lrc_label = tk.Label(self.lrc_frame, text="LRC Syllabizer", font=FONT_HEADER)
@@ -257,7 +300,7 @@ class LandingPage(tk.Frame):
         self.lrc_drop_label.pack(pady=10, fill="both", expand=True)
         
         # Right Side
-        self.rs_frame = tk.Frame(self, bg=controller.colors["frame_bg"], bd=0)
+        self.rs_frame = tk.Frame(self.content_frame, bg=controller.colors["frame_bg"], bd=0)
         self.rs_frame.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
         
         self.rs_label = tk.Label(self.rs_frame, text="Rocksmith Creator", font=FONT_HEADER)
@@ -276,9 +319,16 @@ class LandingPage(tk.Frame):
         self.lrc_frame.dnd_bind('<<Drop>>', self.drop_lrc)
         self.rs_frame.drop_target_register(DND_FILES)
         self.rs_frame.dnd_bind('<<Drop>>', self.drop_rs)
+
+    def open_options(self):
+        self.controller.show_frame("OptionsFrame", data="LandingPage")
         
     def update_theme(self, colors):
         self.configure(bg=colors["bg"])
+        self.top_bar.configure(bg=colors["bg"])
+        self.content_frame.configure(bg=colors["bg"])
+        self.options_btn.configure(bg=colors["btn_bg"], fg=colors["btn_fg"], activebackground=colors["btn_active_bg"], activeforeground=colors["btn_active_fg"])
+        
         self.lrc_frame.configure(bg=colors["frame_bg"])
         self.rs_frame.configure(bg=colors["frame_bg"])
         
@@ -388,7 +438,8 @@ class LRCFrame(tk.Frame):
                     widget.configure(bg=colors["btn_bg"], fg=colors["btn_fg"], activebackground=colors["btn_active_bg"], activeforeground=colors["btn_active_fg"])
                 elif isinstance(widget, tk.Entry):
                     widget.configure(bg=colors["entry_bg"], fg=colors["entry_fg"], insertbackground=colors["fg"], 
-                                     highlightbackground=colors["border"], highlightcolor=colors["highlight"], highlightthickness=1)
+                                     highlightbackground=colors["border"], highlightcolor=colors["highlight"], highlightthickness=1,
+                                     disabledbackground=colors["entry_bg"], disabledforeground=colors["entry_fg"])
                 elif isinstance(widget, scrolledtext.ScrolledText):
                     widget.configure(bg=colors["text_bg"], fg=colors["text_fg"], insertbackground=colors["fg"], selectbackground=colors["select_bg"],
                                      highlightbackground=colors["border"], highlightcolor=colors["highlight"], highlightthickness=1)
@@ -552,7 +603,8 @@ class RocksmithFrame(tk.Frame):
                     widget.configure(bg=colors["btn_bg"], fg=colors["btn_fg"], activebackground=colors["btn_active_bg"], activeforeground=colors["btn_active_fg"])
                 elif isinstance(widget, tk.Entry):
                     widget.configure(bg=colors["entry_bg"], fg=colors["entry_fg"], insertbackground=colors["fg"],
-                                     highlightbackground=colors["border"], highlightcolor=colors["highlight"], highlightthickness=1)
+                                     highlightbackground=colors["border"], highlightcolor=colors["highlight"], highlightthickness=1,
+                                     disabledbackground=colors["entry_bg"], disabledforeground=colors["entry_fg"])
             except: pass
             for child in widget.winfo_children():
                 update_recursive(child)
@@ -657,7 +709,7 @@ class OptionsFrame(tk.Frame):
         footer_frame = tk.Frame(self.content_frame)
         footer_frame.pack(side="bottom", pady=20)
         
-        tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025, version 1.0.0", font=("Segoe UI", 9)).pack()
+        tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025, version 1.1.0", font=("Segoe UI", 9)).pack()
         
         github_link = tk.Label(footer_frame, text="GitHub", font=("Segoe UI", 9, "underline"), fg="#007acc", cursor="hand2")
         github_link.pack()
