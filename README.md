@@ -62,10 +62,8 @@ This folder contains all files needed to build Lyridan into a single executable.
 - `syllabize.py` - Core syllabization and Rocksmith export logic
 - `config.py` - Configuration management (persistent settings)
 - `English.txt` - English syllabification dictionary (47,737 words)
-- `lyridanlogo.jpg` - Application icon/logo (window icon)
 - `lyridanlogo.ico` - Application icon/logo (executable icon)
 - `build.bat` - Automated build script (Windows)
-- `create_icon.py` - Icon conversion utility (optional, used to generate .ico from .jpg)
 
 ### Prerequisites
 
@@ -91,7 +89,7 @@ build.bat
 #### Option 2: Manual build
 Run the PyInstaller command:
 ```bash
-pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --add-data "English.txt;." --add-data "lyridanlogo.jpg;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate "gui.py"
+pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --add-data "English.txt;." --add-data "lyridanlogo.ico;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate "gui.py"
 ```
 
 ### Output
@@ -117,4 +115,5 @@ This also means that this program is to be used merely as an assistance tool or 
 ## Credits
 
 This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
