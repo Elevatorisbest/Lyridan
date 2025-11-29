@@ -1,6 +1,6 @@
 @echo off
 echo ================================
-echo Lyridan Build Script
+echo Starting Lyridan Windows Build
 echo ================================
 echo.
 
@@ -32,3 +32,4 @@ if %errorlevel% equ 0 (
 )
 
 pause
+
