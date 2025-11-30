@@ -94,8 +94,8 @@ jobs:
     - name: Install Dependencies
       run: |
         pip install --upgrade pip
-        # Install standard requirements
-        pip install -r requirements.txt
+        # Install standard requirements, but force 'wrapt' to be built from source
+        pip install --no-binary=wrapt -r requirements.txt
         # Uninstall standard tkinterdnd2 and install the Mac-universal version as per README
         pip uninstall -y tkinterdnd2
         pip install tkinterdnd2-universal
@@ -139,8 +139,8 @@ jobs:
 
     - name: Build macOS App
       run: |
-        chmod +x build.command
-        ./build.command
+        # Call the compile script directly with the runner's python
+        python3 maccompile.py
 
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
