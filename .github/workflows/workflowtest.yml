@@ -64,11 +64,9 @@ jobs:
         else:
             last_bump_sha = run_command('git log --grep="\\[bump\\]" --grep="version bump" -n 1 --pretty=format:"%H"')
             if last_bump_sha:
-                # Count commits since the last bump + 1
                 count = run_command(f'git rev-list --count {last_bump_sha}..HEAD')
                 build_number = int(count) + 1 if count.isdigit() else 1
             else:
-                # No previous bump commit, count all commits
                 count = run_command('git rev-list --count HEAD')
                 build_number = int(count) if count.isdigit() else 1
         
@@ -81,6 +79,7 @@ jobs:
         files_to_update = ['gui.py', 'maccompile.py']
         mac_ver_pattern = re.compile(r"(VERSION\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
         copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # Regex updated to handle potential -DEV suffix in source file
         gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.\w-]+)")
 
         for file_path in files_to_update:
@@ -92,11 +91,12 @@ jobs:
                 continue
 
             if 'maccompile.py' in file_path:
-                content = mac_ver_pattern.sub(f"\\1\\2{new_dev_version}\\4", content)
-                content = copyright_pattern.sub(f"\\1\\2\\3 | Compiled on {compile_datetime}\\4", content)
+                content = mac_ver_pattern.sub(f"\\g<1>\\g<2>{new_dev_version}\\g<4>", content)
+                content = copyright_pattern.sub(f"\\g<1>\\g<2>\\g<3> | Compiled on {compile_datetime}\\g<4>", content)
             
             if 'gui.py' in file_path:
-                new_footer = f"\\1{new_dev_version} (Compiled on {compile_datetime})"
+                # FIXED LINE: Changed \\1 to \\g<1> to avoid ambiguity
+                new_footer = f"\\g<1>{new_dev_version} (Compiled on {compile_datetime})"
                 content = gui_ver_pattern.sub(new_footer, content)
 
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -173,11 +173,9 @@ jobs:
         else:
             last_bump_sha = run_command('git log --grep="\\[bump\\]" --grep="version bump" -n 1 --pretty=format:"%H"')
             if last_bump_sha:
-                # Count commits since the last bump + 1
                 count = run_command(f'git rev-list --count {last_bump_sha}..HEAD')
                 build_number = int(count) + 1 if count.isdigit() else 1
             else:
-                # No previous bump commit, count all commits
                 count = run_command('git rev-list --count HEAD')
                 build_number = int(count) if count.isdigit() else 1
         
@@ -190,6 +188,7 @@ jobs:
         files_to_update = ['gui.py', 'maccompile.py']
         mac_ver_pattern = re.compile(r"(VERSION\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
         copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # Regex updated to handle potential -DEV suffix in source file
         gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.\w-]+)")
 
         for file_path in files_to_update:
@@ -201,11 +200,12 @@ jobs:
                 continue
 
             if 'maccompile.py' in file_path:
-                content = mac_ver_pattern.sub(f"\\1\\2{new_dev_version}\\4", content)
-                content = copyright_pattern.sub(f"\\1\\2\\3 | Compiled on {compile_datetime}\\4", content)
+                content = mac_ver_pattern.sub(f"\\g<1>\\g<2>{new_dev_version}\\g<4>", content)
+                content = copyright_pattern.sub(f"\\g<1>\\g<2>\\g<3> | Compiled on {compile_datetime}\\g<4>", content)
             
             if 'gui.py' in file_path:
-                new_footer = f"\\1{new_dev_version} (Compiled on {compile_datetime})"
+                # FIXED LINE: Changed \\1 to \\g<1> to avoid ambiguity
+                new_footer = f"\\g<1>{new_dev_version} (Compiled on {compile_datetime})"
                 content = gui_ver_pattern.sub(new_footer, content)
 
             with open(file_path, 'w', encoding='utf-8') as f:
