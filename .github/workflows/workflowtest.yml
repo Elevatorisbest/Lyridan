@@ -3,7 +3,7 @@ name: Workflow Test Build
 on:
   push:
     branches: [ "workflowtest" ]
-  workflow_dispatch: # Allows you to run this manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -12,6 +12,8 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetches all history for git versioning
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -27,79 +29,83 @@ jobs:
     - name: Bump Version and Timestamp
       shell: python
       run: |
-        import re
         import os
+        import re
+        import subprocess
         from datetime import datetime, timezone
 
-        # --- CONFIGURATION ---
-        run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        def run_command(command):
+            try:
+                return subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT).strip()
+            except subprocess.CalledProcessError as e:
+                print(f"Command failed: {e.output}")
+                return ""
+
+        # 1. Get the core version from the single source of truth
+        core_version = None
+        try:
+            with open('maccompile.py', 'r', encoding='utf-8') as f:
+                content = f.read()
+                match = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", content)
+                if match:
+                    core_version = match.group(1).split('-')[0]
+        except FileNotFoundError:
+            print("maccompile.py not found. Skipping version bump.")
+        
+        if not core_version:
+            raise ValueError("Could not read core version from maccompile.py")
+
+        # 2. Determine the build number based on Git history
+        current_commit_msg = run_command("git log -1 --pretty=%B")
+        build_number = 1
+
+        if '[bump]' in current_commit_msg.lower() or 'version bump' in current_commit_msg.lower():
+            build_number = 1
+        else:
+            last_bump_sha = run_command('git log --grep="\\[bump\\]" --grep="version bump" -n 1 --pretty=format:"%H"')
+            if last_bump_sha:
+                # Count commits since the last bump + 1
+                count = run_command(f'git rev-list --count {last_bump_sha}..HEAD')
+                build_number = int(count) + 1 if count.isdigit() else 1
+            else:
+                # No previous bump commit, count all commits
+                count = run_command('git rev-list --count HEAD')
+                build_number = int(count) if count.isdigit() else 1
+        
+        # 3. Construct the new version strings
+        new_dev_version = f"{core_version}.{build_number}-DEV"
         compile_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        print(f"Determined new version: {new_dev_version}")
 
-        # --- REGEX PATTERNS ---
-        # For maccompile.py: version = "1.1.0"
-        mac_ver_pattern = re.compile(r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
-        # For maccompile.py: COPYRIGHT = "..."
-        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
-        # For gui.py: ...version 1.1.0
-        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.]+)")
-
-        # --- FILE PROCESSING ---
+        # 4. Update files
         files_to_update = ['gui.py', 'maccompile.py']
+        mac_ver_pattern = re.compile(r"(VERSION\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.\w-]+)")
 
         for file_path in files_to_update:
-            if not os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except FileNotFoundError:
                 print(f"Skipping {file_path} (not found)")
                 continue
-            
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
 
-            updated = False
-            
-            # --- Logic for maccompile.py ---
             if 'maccompile.py' in file_path:
-                # Update version variable
-                match = mac_ver_pattern.search(content)
-                if match:
-                    prefix, quote_start, current_ver, quote_end = match.groups()
-                    clean_ver = current_ver.split('-')[0]
-                    new_ver = f"{clean_ver}.{run_num}-DEV"
-                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
-                    print(f"Updated {file_path} VERSION: {current_ver} -> {new_ver}")
-                    updated = True
-
-                # Update copyright with timestamp
-                match = copyright_pattern.search(content)
-                if match:
-                    prefix, quote_start, current_copyright, quote_end = match.groups()
-                    new_copyright = f"{current_copyright} | Compiled on {compile_datetime}"
-                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_copyright}{quote_end}")
-                    print(f"Updated {file_path} COPYRIGHT with timestamp.")
-                    updated = True
-
-            # --- Logic for gui.py ---
+                content = mac_ver_pattern.sub(f"\\1\\2{new_dev_version}\\4", content)
+                content = copyright_pattern.sub(f"\\1\\2\\3 | Compiled on {compile_datetime}\\4", content)
+            
             if 'gui.py' in file_path:
-                match = gui_ver_pattern.search(content)
-                if match:
-                    prefix, current_ver = match.groups()
-                    # We need the new_ver from the maccompile logic, so let's calculate it again
-                    clean_ver = current_ver.split('-')[0]
-                    new_ver = f"{clean_ver}.{run_num}-DEV"
-                    new_line = f"{prefix}{new_ver} (Compiled on {compile_datetime})"
-                    content = content.replace(match.group(0), new_line)
-                    print(f"Updated {file_path} footer version string.")
-                    updated = True
+                new_footer = f"\\1{new_dev_version} (Compiled on {compile_datetime})"
+                content = gui_ver_pattern.sub(new_footer, content)
 
-            if updated:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-            else:
-                print(f"Warning: No patterns matched in {file_path}")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"Successfully updated versions in {file_path}")
 
     - name: Build Windows Executable
       shell: cmd
-      run: |
-        call build.bat
+      run: call build.bat
 
     - name: Upload Windows Artifact
       uses: actions/upload-artifact@v4
@@ -113,6 +119,8 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetches all history for git versioning
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -122,7 +130,6 @@ jobs:
     - name: Install Dependencies
       run: |
         pip install --upgrade pip
-        # Install standard requirements, but force 'wrapt' to be built from source
         pip install --no-binary=wrapt -r requirements.txt
         pip uninstall -y tkinterdnd2
         pip install tkinterdnd2-universal
@@ -131,79 +138,82 @@ jobs:
     - name: Bump Version and Timestamp
       shell: python
       run: |
-        import re
         import os
+        import re
+        import subprocess
         from datetime import datetime, timezone
 
-        # --- CONFIGURATION ---
-        run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        def run_command(command):
+            try:
+                return subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT).strip()
+            except subprocess.CalledProcessError as e:
+                print(f"Command failed: {e.output}")
+                return ""
+
+        # 1. Get the core version from the single source of truth
+        core_version = None
+        try:
+            with open('maccompile.py', 'r', encoding='utf-8') as f:
+                content = f.read()
+                match = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", content)
+                if match:
+                    core_version = match.group(1).split('-')[0]
+        except FileNotFoundError:
+            print("maccompile.py not found. Skipping version bump.")
+        
+        if not core_version:
+            raise ValueError("Could not read core version from maccompile.py")
+
+        # 2. Determine the build number based on Git history
+        current_commit_msg = run_command("git log -1 --pretty=%B")
+        build_number = 1
+
+        if '[bump]' in current_commit_msg.lower() or 'version bump' in current_commit_msg.lower():
+            build_number = 1
+        else:
+            last_bump_sha = run_command('git log --grep="\\[bump\\]" --grep="version bump" -n 1 --pretty=format:"%H"')
+            if last_bump_sha:
+                # Count commits since the last bump + 1
+                count = run_command(f'git rev-list --count {last_bump_sha}..HEAD')
+                build_number = int(count) + 1 if count.isdigit() else 1
+            else:
+                # No previous bump commit, count all commits
+                count = run_command('git rev-list --count HEAD')
+                build_number = int(count) if count.isdigit() else 1
+        
+        # 3. Construct the new version strings
+        new_dev_version = f"{core_version}.{build_number}-DEV"
         compile_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        print(f"Determined new version: {new_dev_version}")
 
-        # --- REGEX PATTERNS ---
-        # For maccompile.py: version = "1.1.0"
-        mac_ver_pattern = re.compile(r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
-        # For maccompile.py: COPYRIGHT = "..."
-        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
-        # For gui.py: ...version 1.1.0
-        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.]+)")
-
-        # --- FILE PROCESSING ---
+        # 4. Update files
         files_to_update = ['gui.py', 'maccompile.py']
+        mac_ver_pattern = re.compile(r"(VERSION\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.\w-]+)")
 
         for file_path in files_to_update:
-            if not os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except FileNotFoundError:
                 print(f"Skipping {file_path} (not found)")
                 continue
-            
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
 
-            updated = False
-            
-            # --- Logic for maccompile.py ---
             if 'maccompile.py' in file_path:
-                # Update version variable
-                match = mac_ver_pattern.search(content)
-                if match:
-                    prefix, quote_start, current_ver, quote_end = match.groups()
-                    clean_ver = current_ver.split('-')[0]
-                    new_ver = f"{clean_ver}.{run_num}-DEV"
-                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
-                    print(f"Updated {file_path} VERSION: {current_ver} -> {new_ver}")
-                    updated = True
-
-                # Update copyright with timestamp
-                match = copyright_pattern.search(content)
-                if match:
-                    prefix, quote_start, current_copyright, quote_end = match.groups()
-                    new_copyright = f"{current_copyright} | Compiled on {compile_datetime}"
-                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_copyright}{quote_end}")
-                    print(f"Updated {file_path} COPYRIGHT with timestamp.")
-                    updated = True
-
-            # --- Logic for gui.py ---
+                content = mac_ver_pattern.sub(f"\\1\\2{new_dev_version}\\4", content)
+                content = copyright_pattern.sub(f"\\1\\2\\3 | Compiled on {compile_datetime}\\4", content)
+            
             if 'gui.py' in file_path:
-                match = gui_ver_pattern.search(content)
-                if match:
-                    prefix, current_ver = match.groups()
-                    # We need the new_ver from the maccompile logic, so let's calculate it again
-                    clean_ver = current_ver.split('-')[0]
-                    new_ver = f"{clean_ver}.{run_num}-DEV"
-                    new_line = f"{prefix}{new_ver} (Compiled on {compile_datetime})"
-                    content = content.replace(match.group(0), new_line)
-                    print(f"Updated {file_path} footer version string.")
-                    updated = True
+                new_footer = f"\\1{new_dev_version} (Compiled on {compile_datetime})"
+                content = gui_ver_pattern.sub(new_footer, content)
 
-            if updated:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-            else:
-                print(f"Warning: No patterns matched in {file_path}")
-
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"Successfully updated versions in {file_path}")
 
     - name: Build macOS App
-      run: |
-        python3 maccompile.py
+      run: python3 maccompile.py
 
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
