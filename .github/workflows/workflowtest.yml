@@ -1,0 +1,149 @@
+name: Workflow Test Build
+
+on:
+  push:
+    branches: [ "workflowtest" ]
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Adjust if you need a specific version
+
+    - name: Install Dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        # Ensure PyInstaller is installed (in case it's not in requirements)
+        pip install pyinstaller
+
+    - name: Bump Version to DEV
+      shell: python
+      run: |
+        import re
+        import os
+        
+        # Get the run number to use as a dynamic version segment
+        run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        files_to_update = ['gui.py', 'maccompile.py']
+        
+        # Regex to find: version = "..." or version='...'
+        # It captures the quote style to match it on replacement
+        version_pattern = r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])"
+
+        for file_path in files_to_update:
+            if not os.path.exists(file_path):
+                print(f"Skipping {file_path} (not found)")
+                continue
+                
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Find the version string
+            match = re.search(version_pattern, content, re.IGNORECASE)
+            if match:
+                prefix = match.group(1)
+                quote_start = match.group(2)
+                current_ver = match.group(3)
+                quote_end = match.group(4)
+                
+                # Logic: Clean existing suffixes and append Build Number + DEV
+                # Example: "1.1.0" -> "1.1.0.42-DEV"
+                clean_ver = current_ver.split('-')[0]
+                new_ver = f"{clean_ver}.{run_num}-DEV"
+                
+                new_content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                print(f"Updated {file_path}: {current_ver} -> {new_ver}")
+            else:
+                print(f"Warning: Could not find version pattern in {file_path}")
+
+    - name: Build Windows Executable
+      shell: cmd
+      run: |
+        call build.bat
+
+    - name: Upload Windows Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Lyridan-Windows-DEV
+        path: dist/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        pip install --upgrade pip
+        # Install standard requirements
+        pip install -r requirements.txt
+        # Uninstall standard tkinterdnd2 and install the Mac-universal version as per README
+        pip uninstall -y tkinterdnd2
+        pip install tkinterdnd2-universal
+        pip install pyinstaller
+
+    - name: Bump Version to DEV
+      shell: python
+      run: |
+        import re
+        import os
+        
+        run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        files_to_update = ['gui.py', 'maccompile.py']
+        version_pattern = r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])"
+
+        for file_path in files_to_update:
+            if not os.path.exists(file_path):
+                print(f"Skipping {file_path} (not found)")
+                continue
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            match = re.search(version_pattern, content, re.IGNORECASE)
+            if match:
+                prefix = match.group(1)
+                quote_start = match.group(2)
+                current_ver = match.group(3)
+                quote_end = match.group(4)
+                
+                clean_ver = current_ver.split('-')[0]
+                new_ver = f"{clean_ver}.{run_num}-DEV"
+                
+                new_content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                print(f"Updated {file_path}: {current_ver} -> {new_ver}")
+            else:
+                print(f"Warning: Could not find version pattern in {file_path}")
+
+    - name: Build macOS App
+      run: |
+        chmod +x build.command
+        ./build.command
+
+    - name: Upload macOS Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Lyridan-MacOS-DEV
+        path: dist/*.dmg
