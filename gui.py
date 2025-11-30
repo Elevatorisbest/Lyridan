@@ -519,7 +519,7 @@ class LRCFrame(tk.Frame):
             dialog = TimedWarningDialog(
                 self.controller.container, 
                 "Important Information", 
-                "123This tool is not intended as a complete replacement of syllabization and romanization/transliteration.\n\n"
+                "This tool is not intended as a complete replacement of syllabization and romanization/transliteration.\n\n"
                 "Incorrect syllabization and romanization/transliteration may occur.\n\n"
                 "Please verify the accuracy of the results prior to implementing it in a Rocksmith chart.",
                 5,
@@ -755,4 +755,5 @@ class OptionsFrame(tk.Frame):
 if __name__ == "__main__":
     app = LRCApp()
     app.mainloop()
+
 
