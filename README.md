@@ -60,7 +60,10 @@ Lyridan supports **Windows** and **macOS** (Intel and Apple Silicon). Linux is n
 2. Move the app to your Applications folder.
 3. Launch the app.
 
-ℹ️ *If macOS warns that the app is from an "Unidentified Developer" or "damaged", right-click (Control+Click) the app and select **Open**, then click **Open** in the dialog box.*
+ℹ️ *If macOS warns that the app is from an "Unidentified Developer" or "damaged", open Terminal and enter:*
+```bash
+xattr -cr /Applications/Lyridan.app
+```
 
 ## Build Instructions
 
@@ -130,6 +133,7 @@ This program is to be used merely as an assistance tool or an experiment when cr
 ## Credits
 
 This program uses english language syllabization table (English.txt) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
 
 
