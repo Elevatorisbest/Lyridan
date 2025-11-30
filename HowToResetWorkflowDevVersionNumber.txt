@@ -1,0 +1,1 @@
+Type "[bump]" in commit message to reset dev version counter
