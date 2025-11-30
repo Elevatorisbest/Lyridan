@@ -16,57 +16,85 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11' # Adjust if you need a specific version
+        python-version: '3.11'
 
     - name: Install Dependencies
       run: |
         pip install --upgrade pip
         pip install -r requirements.txt
-        # Ensure PyInstaller is installed (in case it's not in requirements)
         pip install pyinstaller
 
-    - name: Bump Version to DEV
+    - name: Bump Version and Timestamp
       shell: python
       run: |
         import re
         import os
-        
-        # Get the run number to use as a dynamic version segment
+        from datetime import datetime, timezone
+
+        # --- CONFIGURATION ---
         run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        compile_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+        # --- REGEX PATTERNS ---
+        # For maccompile.py: version = "1.1.0"
+        mac_ver_pattern = re.compile(r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # For maccompile.py: COPYRIGHT = "..."
+        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # For gui.py: ...version 1.1.0
+        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.]+)")
+
+        # --- FILE PROCESSING ---
         files_to_update = ['gui.py', 'maccompile.py']
-        
-        # Regex to find: version = "..." or version='...'
-        # It captures the quote style to match it on replacement
-        version_pattern = r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])"
 
         for file_path in files_to_update:
             if not os.path.exists(file_path):
                 print(f"Skipping {file_path} (not found)")
                 continue
-                
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+
+            updated = False
             
-            # Find the version string
-            match = re.search(version_pattern, content, re.IGNORECASE)
-            if match:
-                prefix = match.group(1)
-                quote_start = match.group(2)
-                current_ver = match.group(3)
-                quote_end = match.group(4)
-                
-                # Logic: Clean existing suffixes and append Build Number + DEV
-                # Example: "1.1.0" -> "1.1.0.42-DEV"
-                clean_ver = current_ver.split('-')[0]
-                new_ver = f"{clean_ver}.{run_num}-DEV"
-                
-                new_content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
-                
+            # --- Logic for maccompile.py ---
+            if 'maccompile.py' in file_path:
+                # Update version variable
+                match = mac_ver_pattern.search(content)
+                if match:
+                    prefix, quote_start, current_ver, quote_end = match.groups()
+                    clean_ver = current_ver.split('-')[0]
+                    new_ver = f"{clean_ver}.{run_num}-DEV"
+                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
+                    print(f"Updated {file_path} VERSION: {current_ver} -> {new_ver}")
+                    updated = True
+
+                # Update copyright with timestamp
+                match = copyright_pattern.search(content)
+                if match:
+                    prefix, quote_start, current_copyright, quote_end = match.groups()
+                    new_copyright = f"{current_copyright} | Compiled on {compile_datetime}"
+                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_copyright}{quote_end}")
+                    print(f"Updated {file_path} COPYRIGHT with timestamp.")
+                    updated = True
+
+            # --- Logic for gui.py ---
+            if 'gui.py' in file_path:
+                match = gui_ver_pattern.search(content)
+                if match:
+                    prefix, current_ver = match.groups()
+                    # We need the new_ver from the maccompile logic, so let's calculate it again
+                    clean_ver = current_ver.split('-')[0]
+                    new_ver = f"{clean_ver}.{run_num}-DEV"
+                    new_line = f"{prefix}{new_ver} (Compiled on {compile_datetime})"
+                    content = content.replace(match.group(0), new_line)
+                    print(f"Updated {file_path} footer version string.")
+                    updated = True
+
+            if updated:
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-                print(f"Updated {file_path}: {current_ver} -> {new_ver}")
+                    f.write(content)
             else:
-                print(f"Warning: Could not find version pattern in {file_path}")
+                print(f"Warning: No patterns matched in {file_path}")
 
     - name: Build Windows Executable
       shell: cmd
@@ -96,20 +124,31 @@ jobs:
         pip install --upgrade pip
         # Install standard requirements, but force 'wrapt' to be built from source
         pip install --no-binary=wrapt -r requirements.txt
-        # Uninstall standard tkinterdnd2 and install the Mac-universal version as per README
         pip uninstall -y tkinterdnd2
         pip install tkinterdnd2-universal
         pip install pyinstaller
 
-    - name: Bump Version to DEV
+    - name: Bump Version and Timestamp
       shell: python
       run: |
         import re
         import os
-        
+        from datetime import datetime, timezone
+
+        # --- CONFIGURATION ---
         run_num = os.environ.get('GITHUB_RUN_NUMBER', '0')
+        compile_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+        # --- REGEX PATTERNS ---
+        # For maccompile.py: version = "1.1.0"
+        mac_ver_pattern = re.compile(r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # For maccompile.py: COPYRIGHT = "..."
+        copyright_pattern = re.compile(r"(COPYRIGHT\s*=\s*)(['\"])([^'\"]+)(['\"])", re.IGNORECASE)
+        # For gui.py: ...version 1.1.0
+        gui_ver_pattern = re.compile(r"(Made by Elevatorisbest.*?version\s+)([\d\.]+)")
+
+        # --- FILE PROCESSING ---
         files_to_update = ['gui.py', 'maccompile.py']
-        version_pattern = r"(version\s*=\s*)(['\"])([^'\"]+)(['\"])"
 
         for file_path in files_to_update:
             if not os.path.exists(file_path):
@@ -118,28 +157,52 @@ jobs:
             
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+
+            updated = False
             
-            match = re.search(version_pattern, content, re.IGNORECASE)
-            if match:
-                prefix = match.group(1)
-                quote_start = match.group(2)
-                current_ver = match.group(3)
-                quote_end = match.group(4)
-                
-                clean_ver = current_ver.split('-')[0]
-                new_ver = f"{clean_ver}.{run_num}-DEV"
-                
-                new_content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
-                
+            # --- Logic for maccompile.py ---
+            if 'maccompile.py' in file_path:
+                # Update version variable
+                match = mac_ver_pattern.search(content)
+                if match:
+                    prefix, quote_start, current_ver, quote_end = match.groups()
+                    clean_ver = current_ver.split('-')[0]
+                    new_ver = f"{clean_ver}.{run_num}-DEV"
+                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_ver}{quote_end}")
+                    print(f"Updated {file_path} VERSION: {current_ver} -> {new_ver}")
+                    updated = True
+
+                # Update copyright with timestamp
+                match = copyright_pattern.search(content)
+                if match:
+                    prefix, quote_start, current_copyright, quote_end = match.groups()
+                    new_copyright = f"{current_copyright} | Compiled on {compile_datetime}"
+                    content = content.replace(match.group(0), f"{prefix}{quote_start}{new_copyright}{quote_end}")
+                    print(f"Updated {file_path} COPYRIGHT with timestamp.")
+                    updated = True
+
+            # --- Logic for gui.py ---
+            if 'gui.py' in file_path:
+                match = gui_ver_pattern.search(content)
+                if match:
+                    prefix, current_ver = match.groups()
+                    # We need the new_ver from the maccompile logic, so let's calculate it again
+                    clean_ver = current_ver.split('-')[0]
+                    new_ver = f"{clean_ver}.{run_num}-DEV"
+                    new_line = f"{prefix}{new_ver} (Compiled on {compile_datetime})"
+                    content = content.replace(match.group(0), new_line)
+                    print(f"Updated {file_path} footer version string.")
+                    updated = True
+
+            if updated:
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-                print(f"Updated {file_path}: {current_ver} -> {new_ver}")
+                    f.write(content)
             else:
-                print(f"Warning: Could not find version pattern in {file_path}")
+                print(f"Warning: No patterns matched in {file_path}")
+
 
     - name: Build macOS App
       run: |
-        # Call the compile script directly with the runner's python
         python3 maccompile.py
 
     - name: Upload macOS Artifact
