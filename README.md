@@ -47,7 +47,7 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 Lyridan supports **Windows** and **macOS** (Intel and native Apple Silicon). Linux is not currently supported or tested.
 
-### Windows
+### 🪟 Windows
 1. Ensure that you have the newest version of Python installed.
 2. Download the newest release (`Lyridan.exe`) from the Releases page.
 3. Place `Lyridan.exe` where you wish to use it.
@@ -55,8 +55,8 @@ Lyridan supports **Windows** and **macOS** (Intel and native Apple Silicon). Lin
 
 ℹ️ *You may receive a SmartScreen warning. It is safe to launch; this warning appears because the app is not code-signed with a paid Microsoft certificate.*
 
-### macOS
-1. Download the newest release (`Lyridan.app` or `.zip`) from the Releases page.
+### 🍎 macOS
+1. Download the newest release (`Lyridan.app`) from the Releases page.
 2. Move the app to your Applications folder or Desktop.
 3. Launch the app.
 
@@ -130,4 +130,5 @@ This program is to be used merely as an assistance tool or an experiment when cr
 ## Credits
 
 This program uses english language syllabization table (English.txt) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
