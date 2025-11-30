@@ -652,7 +652,7 @@ class RocksmithFrame(tk.Frame):
                     dialog = TimedWarningDialog(
                         self.controller.container,
                         "Important Information",
-                        "Test123333 This tool is not intended as a complete replacement of creating an accurate Rocksmith Vocal Arrangement file.\n\n"
+                        "This tool is not intended as a complete replacement of creating an accurate Rocksmith Vocal Arrangement file.\n\n"
                         "It is recommended to use this tool as a starting point and manually adjust the timing and syllabization as needed.\n\n"
                         "Romanization may be incorrect, and syllabizations and timing accuracy for words or syllabes are dependent on the provided lyric file, and can vary by song or source.\n\n"
                         "Please verify the accuracy of the results prior to implementing it in a Rocksmith chart.",
@@ -755,4 +755,5 @@ class OptionsFrame(tk.Frame):
 if __name__ == "__main__":
     app = LRCApp()
     app.mainloop()
+
 
