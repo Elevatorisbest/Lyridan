@@ -45,14 +45,22 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 ## Installation
 
-⚠️ Lyridan has been made and tested only on Windows. I have no idea if it can run on Linux.
+Lyridan supports **Windows** and **macOS** (Intel and Apple Silicon). Linux is not currently supported or tested.
 
-#### 1. Ensure that you have the newest version of Python installed on your PC.
-#### 2. Download the newest release of Lyridan from the Releases page of this repository.
-#### 3. Place Lyridan.exe where you wish to use it (eg. Downloads folder, Desktop, etc.)
-#### 4. Launch the executable.
+### 🪟 Windows
+1. Ensure that you have the newest version of Python installed.
+2. Download the newest release (`Lyridan.exe`) from the Releases page.
+3. Place `Lyridan.exe` where you wish to use it.
+4. Launch the executable.
 
-ℹ️ You may receive a SmartScreen warning telling you to not launch the executable. This is only because I did not pay Microsoft money to sign the app executable (or something like that based on other app developers on Github). It is safe to launch and it never connects to the internet.
+ℹ️ *You may receive a SmartScreen warning. It is safe to launch; this warning appears because the app is not code-signed with a paid Microsoft certificate.*
+
+### 🍎 macOS
+1. Download the newest release (`Lyridan.dmg`) from the Releases page and open it.
+2. Move the app to your Applications folder.
+3. Launch the app.
+
+ℹ️ *If macOS warns that the app is from an "Unidentified Developer" or "damaged", right-click (Control+Click) the app and select **Open**, then click **Open** in the dialog box.*
 
 ## Build Instructions
 
@@ -63,63 +71,65 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 - `gui.py` - Main GUI application
 - `syllabize.py` - Core syllabization and Rocksmith export logic
-- `config.py` - Configuration management (persistent settings)
-- `English.txt` - English syllabification dictionary (47,737 words)
-- `lyridanlogo.ico` - Application icon/logo (executable icon)
-- `build.bat` - Automated build script (Windows)
+- `config.py` - Configuration management
+- `English.txt` - English syllabification dictionary
+- `lyridanlogo.ico` - Windows Icon
+- `lyridanlogo.icns` - macOS Icon
+- `build.bat` - Windows build script
+- `build.command` - macOS build script
+- `maccompile.py` - macOS build logic
 
 ### Prerequisites
 
-Install the required Python packages:
+Install the required Python packages. 
+*Note: For macOS, `tkinterdnd2-universal` is recommended over the standard package.*
 
 ```bash
-pip install requirements.txt
+pip install -r requirements.txt
 ```
-or
+
+or manually:
 
 ```bash
 pip install tkinterdnd2 pykakasi transliterate pyphen pyinstaller
 ```
 
 ### Building the Executable
+#### 🪟 Windows Build
 
-#### Option 1: Use the build script (recommended)
-Simply double-click `build.bat` or run:
+Simply double-click ```build.bat``` or run:
+
 ```bash
 build.bat
 ```
 
-#### Option 2: Manual build
-Run the PyInstaller command:
-```bash
-pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --add-data "English.txt;." --add-data "lyridanlogo.ico;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate "gui.py"
-```
+The compiled executable will be located in: ```dist/Lyridan.exe```
 
-### Output
+#### 🍎 macOS Build (Intel & Apple Silicon)
 
-The compiled executable will be located in:
-- `dist/Lyridan.exe`
+1. Open your Terminal
+2. Ensure the build script has permission to run. Type ```chmod +x``` (note the space), drag ```build.command``` into the terminal window, and press Enter.
+3. Double-click ```build.command``` in Finder.
+4. Wait for the process to finish.
+
+The compiled app bundle will be located in: ```dist/Lyridan.dmg```
 
 ### Configuration File
 
 Lyridan stores user preferences in:
-- `%APPDATA%\Lyridan\options.lrdn`
 
-This includes:
-- Theme preference (Dark / Light / Lyridan Dark)
-- Warning dialog acknowledgments
+- Windows: ```%APPDATA%\Lyridan\options.lrdn```
+- MacOS: ```~/Library/Application Support/Lyridan/options.lrdn```
 
 ## Disclaimer
 
-I wrote this program using Google's newly released Antigravity IDE, where I generated basically all of the code using AI, because I unfortunately have next to no coding skills. I at no point claim that I am good at coding, and while I did my best to find and fix any bugs or oddities, they can still occur. Any help or contributions to improve the program via pull requests are very welcome and I will be very thankful for them if you choose to contribute to it.
+I wrote this program using Google's newly released Antigravity IDE, where I generated basically all of the code using AI, because I unfortunately have next to no coding skills. I at no point claim that I am good at coding, and while I did my best to find and fix any bugs or oddities, they can still occur. Any help or contributions to improve the program via pull requests are very welcome.
 
-This also means that this program is to be used merely as an assistance tool or an experiment when creating a Rocksmith chart, and is not meant to fully automate or replace the process of adding high quality lyrics to the chart.
+This program is to be used merely as an assistance tool or an experiment when creating a Rocksmith chart, and is not meant to fully automate or replace the process of adding high quality lyrics to the chart.
 
 ## Credits
 
-This program uses english language syllabization table (```English.txt```) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
-
-
+This program uses english language syllabization table (English.txt) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
 
 
 
