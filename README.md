@@ -45,7 +45,7 @@ It also lets you generate roughly aligned and syllabized Rocksmith Vocal .XML ar
 
 ## Installation
 
-Lyridan supports **Windows** and **macOS** (Intel and native Apple Silicon). Linux is not currently supported or tested.
+Lyridan supports **Windows** and **macOS** (Intel and Apple Silicon). Linux is not currently supported or tested.
 
 ### 🪟 Windows
 1. Ensure that you have the newest version of Python installed.
@@ -56,8 +56,8 @@ Lyridan supports **Windows** and **macOS** (Intel and native Apple Silicon). Lin
 ℹ️ *You may receive a SmartScreen warning. It is safe to launch; this warning appears because the app is not code-signed with a paid Microsoft certificate.*
 
 ### 🍎 macOS
-1. Download the newest release (`Lyridan.app`) from the Releases page.
-2. Move the app to your Applications folder or Desktop.
+1. Download the newest release (`Lyridan.dmg`) from the Releases page and open it.
+2. Move the app to your Applications folder.
 3. Launch the app.
 
 ℹ️ *If macOS warns that the app is from an "Unidentified Developer" or "damaged", right-click (Control+Click) the app and select **Open**, then click **Open** in the dialog box.*
@@ -105,14 +105,14 @@ build.bat
 
 The compiled executable will be located in: ```dist/Lyridan.exe```
 
-#### 🍎 macOS Build (Intel & native Apple Silicon)
+#### 🍎 macOS Build (Intel & Apple Silicon)
 
 1. Open your Terminal
 2. Ensure the build script has permission to run. Type ```chmod +x``` (note the space), drag ```build.command``` into the terminal window, and press Enter.
 3. Double-click ```build.command``` in Finder.
 4. Wait for the process to finish.
 
-The compiled app bundle will be located in: ```dist/Lyridan.app```
+The compiled app bundle will be located in: ```dist/Lyridan.dmg```
 
 ### Configuration File
 
@@ -130,5 +130,6 @@ This program is to be used merely as an assistance tool or an experiment when cr
 ## Credits
 
 This program uses english language syllabization table (English.txt) taken from Ultra Star Creator github repository (https://github.com/UltraStar-Deluxe/UltraStar-Creator) for the purposes of syllabizing English .lrc lyric files. This repository therefore also uses a GPL-2.0 license.
+
 
 
