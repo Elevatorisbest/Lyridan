@@ -284,6 +284,17 @@ def export_rocksmith_xml(data, output_path, offset=10.0, beatmap_path=None, empt
         text = item['text']
         time_val = item['start']
         
+        # Romanize if Japanese
+        lang = detect_language(text)
+        if lang == 'japanese' and kks:
+            result = kks.convert(text)
+            romanized_text = ""
+            for item_res in result:
+                romanized_text += item_res['hepburn'] + " "
+            text = romanized_text.strip()
+            # Clean up extra spaces
+            text = re.sub(r'\s+', ' ', text)
+        
         # Apply Offset
         time_val += final_offset
         
