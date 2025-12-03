@@ -1,0 +1,72 @@
+name: Build Lyridan
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+jobs:
+  build-windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Using a stable version compatible with PyInstaller
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run build.bat
+        shell: cmd
+        run: |
+          # We pipe "echo." into the script to bypass any "PAUSE" commands 
+          # that might be at the end of the script to prevent the runner from hanging.
+          echo. | call build.bat
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-Windows
+          path: dist/Lyridan.exe
+
+  build-macos:
+    name: Build for macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          # Your README recommends tkinterdnd2-universal for macOS.
+          # We force uninstall the standard one (if requirements.txt installed it) and install universal.
+          pip uninstall -y tkinterdnd2 || true
+          pip install tkinterdnd2-universal
+
+      - name: Run build.command
+        run: |
+          chmod +x build.command
+          # We pipe echo into the command to bypass any "read" or "press enter" prompts
+          echo "" | ./build.command
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-macOS
+          path: dist/Lyridan.dmg
