@@ -5,7 +5,7 @@ import plistlib
 import subprocess
 
 # --- CONFIGURATION ---
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 COPYRIGHT = "Copyright © 2025 Elevatorisbest"
 APP_NAME = "Lyridan"
 SCRIPT_FILE = "gui.py"
