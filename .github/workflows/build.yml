@@ -3,7 +3,7 @@ name: Build Lyridan
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Allows you to run this manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Using a stable version compatible with PyInstaller
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Dependencies
@@ -27,8 +27,6 @@ jobs:
       - name: Run build.bat
         shell: cmd
         run: |
-          # We pipe "echo." into the script to bypass any "PAUSE" commands 
-          # that might be at the end of the script to prevent the runner from hanging.
           echo. | call build.bat
 
       - name: Upload Windows Artifact
@@ -54,16 +52,44 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
-          # Your README recommends tkinterdnd2-universal for macOS.
-          # We force uninstall the standard one (if requirements.txt installed it) and install universal.
           pip uninstall -y tkinterdnd2 || true
           pip install tkinterdnd2-universal
 
       - name: Run build.command
         run: |
           chmod +x build.command
-          # We pipe echo into the command to bypass any "read" or "press enter" prompts
           echo "" | ./build.command
+
+      - name: Create DMG
+        run: |
+          # 1. Check what PyInstaller created in dist/
+          echo "Listing dist directory..."
+          ls -R dist/
+
+          # 2. Define names
+          VOLNAME="Lyridan"
+          DMG_NAME="Lyridan.dmg"
+          
+          # 3. prepare a folder to be turned into the DMG
+          mkdir -p dist/dmg_content
+
+          if [ -d "dist/Lyridan.app" ]; then
+            # If a .app bundle exists, copy it to the staging folder
+            echo "Found Lyridan.app, preparing for DMG..."
+            cp -r "dist/Lyridan.app" dist/dmg_content/
+          elif [ -f "dist/Lyridan" ]; then
+            # If only a binary exists, move it to the staging folder
+            echo "Found Lyridan binary, preparing for DMG..."
+            cp "dist/Lyridan" dist/dmg_content/
+          else
+            echo "Error: Could not find 'Lyridan.app' or 'Lyridan' in dist/."
+            exit 1
+          fi
+
+          # 4. Create the DMG from the content folder using hdiutil (native macOS tool)
+          hdiutil create -volname "$VOLNAME" -srcfolder "dist/dmg_content" -ov -format UDZO "dist/$DMG_NAME"
+          
+          echo "DMG Created successfully."
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
