@@ -1,1 +1,1 @@
-Type "[bump]" in commit message to reset dev version counter
+Type "[bump]" in commit message to reset dev version counter, or change the Lyridan app version number in gui.py at "tk.Label(footer_frame, text="Made by Elevatorisbest using Antigravity IDE, 2025, version A.B.C.D", font=("Segoe UI", 9)).pack()"
