@@ -3,3 +3,12 @@ pykakasi
 transliterate
 pyphen
 pyinstaller
+torch
+transformers
+sudachipy
+sudachidict-full
+cutlet
+deep-phonemizer
+g2p_en
+networkx
+inflect==5.6.0

@@ -17,7 +17,7 @@ echo.
 echo Building Lyridan.exe...
 echo.
 
-pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --add-data "English.txt;." --add-data "lyridanlogo.ico;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate "gui.py"
+pyinstaller --noconfirm --onefile --windowed --clean --name "Lyridan" --icon="lyridanlogo.ico" --hidden-import=syllabize --hidden-import=config --hidden-import=nlp_manager --add-data "English.txt;." --add-data "lyridanlogo.ico;." --collect-all tkinterdnd2 --collect-all pykakasi --collect-all transliterate --collect-all cutlet --collect-all sudachipy --collect-all sudachidict_full --collect-all g2p_en --collect-all torch --collect-all transformers --collect-all unidic_lite --collect-all fugashi "gui.py"
 
 echo.
 if %errorlevel% equ 0 (
