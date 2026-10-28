@@ -14,10 +14,12 @@ datas = [
     (os.path.join(ROOT, "assets", "lyridanlogo.ico"), "assets"),
 ]
 datas += collect_data_files("unidic_lite")
+datas += collect_data_files("certifi")
 binaries = collect_dynamic_libs("fugashi")
+binaries += collect_dynamic_libs("onnxruntime")
 
 excludes = [
-    "tkinter", "unittest", "pydoc", "test", "numpy", "PIL",
+    "tkinter", "pydoc", "PIL", "torch", "torchaudio", "scipy", "matplotlib",
     "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtWebEngineCore",
     "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtMultimedia", "PySide6.QtPdf",
     "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtOpenGL", "PySide6.QtSql",
@@ -29,7 +31,7 @@ a = Analysis(
     pathex=[ROOT],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["fugashi", "unidic_lite", "lyridan._build", "shlex", "csv", "collections", "site"],
+    hiddenimports=["fugashi", "unidic_lite", "lyridan._build", "onnxruntime", "soundfile", "soxr", "shlex", "csv", "collections", "site"],
     excludes=excludes,
     noarchive=False,
 )

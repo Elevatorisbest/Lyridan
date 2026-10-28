@@ -161,3 +161,66 @@ def test_build_info_channels(tmp_path, monkeypatch):
     importlib.reload(lyridan._build)
     importlib.reload(buildinfo)
     assert buildinfo.info()["build_number"] == "local"
+
+
+# ----------------------------------------------------------------- audio alignment (experimental)
+def test_lrc_background_split():
+    from lyridan.parsers.lrc import parse_lrc
+    src = parse_lrc("[00:10.00](Every night, it's alright) C'mon, girl\n[00:14.00]Next\n")
+    assert [(l.text, l.background) for l in src.lines[:2]] == [("C'mon, girl", False),
+                                                               ("(Every night, it's alright)", True)]
+
+
+def test_ctc_align_and_offset_detection():
+    import numpy as np
+    from lyridan.align.aligner import ctc_align, detect_offset
+    # synthetic emissions: blank everywhere, tokens 3,5,7 peak at frames 20, 30, 45
+    T, C = 80, 28
+    lp = np.full((T, C), -8.0, dtype=np.float32)
+    lp[:, 0] = -0.01
+    for f, tok in ((20, 3), (21, 3), (30, 5), (45, 7)):
+        lp[f, tok], lp[f, 0] = -0.01, -6.0
+    spans, conf = ctc_align(lp, [3, 5, 7])
+    assert [a for a, _ in spans] == [20, 30, 45] and conf > 0.9
+    # vocal activity right after every line timestamp, shifted by +12.34 s
+    fps, n = 50, 50 * 120
+    em = np.zeros((n, C), dtype=np.float32)
+    starts = [5.0, 17.0, 31.5, 44.0, 60.2, 77.7]
+    for s in starts:
+        a = int((s + 12.34) * fps)
+        em[a:a + 75, 0] = np.log(0.05)
+    off, _, _ = detect_offset(em, 1 / fps, starts, search=(-5, 30))
+    assert abs(off - 12.34) < 0.05
+
+
+def test_ttml_writer_roundtrip(tmp_path):
+    from lyridan.exports import ttml
+    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    p = tmp_path / "x.ttml"
+    p.write_text(ttml(src), encoding="utf-8")
+    back = load_lyrics(str(p))
+    assert back.timing == "syllable"
+    assert [l.text for l in back.lines][:3] == [l.text for l in src.lines][:3]
+    assert sum(l.background for l in back.lines) == sum(l.background for l in src.lines)
+
+
+@pytest.mark.skipif(not os.environ.get("LYRIDAN_ALIGN_MODEL") or not os.environ.get("LYRIDAN_TEST_AUDIO"),
+                    reason="needs the alignment model and the song audio")
+def test_alignment_real_song():
+    import difflib
+    import json
+    import statistics
+    from lyridan.align import align_lyrics
+    model = os.environ["LYRIDAN_ALIGN_MODEL"]
+    meta = json.load(open(os.path.splitext(model)[0] + ".json"))
+    s = Settings()
+    truth = process(load_lyrics(os.path.join(F, "baby_be_mine.ttml")), s)
+    src = load_lyrics(os.path.join(F, "baby_be_mine.lrc"))
+    al, rep = align_lyrics(src, os.environ["LYRIDAN_TEST_AUDIO"], s, model, meta)
+    assert abs(rep.offset - 14.024) < 0.1           # chart audio = song + 10 s + 2 bars
+    flat = lambda pr: [(x.text.lower(), x.start) for l in pr.lines if not l.background for x in l.syllables()]
+    T, X = flat(truth), flat(process(al, s))
+    sm = difflib.SequenceMatcher(a=[t[0] for t in T], b=[x[0] for x in X], autojunk=False)
+    errs = [abs(X[j + k][1] - T[i + k][1]) for i, j, n in sm.get_matching_blocks() for k in range(n)]
+    assert statistics.median(errs) < 0.12
+    assert sum(e < 0.2 for e in errs) / len(errs) > 0.75

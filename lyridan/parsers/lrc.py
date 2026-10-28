@@ -94,7 +94,19 @@ def _split_enhanced(text: str, line_start: float) -> Tuple[List[SourcePiece], bo
     return pieces, True
 
 
-def parse_lrc(content: str, path: str = "") -> SourceLyrics:
+_PAREN = re.compile(r"\(([^()]*)\)")
+
+
+def _split_background(body: str):
+    """'(Every night) C'mon, girl' -> ("C'mon, girl", ["Every night"])."""
+    bgs = [m.group(1).strip() for m in _PAREN.finditer(body) if m.group(1).strip()]
+    main = " ".join(_PAREN.sub(" ", body).split())
+    return main, bgs
+
+
+def parse_lrc(content: str, path: str = "", split_background: bool = True) -> SourceLyrics:
+    """Parse LRC. Parenthesised parts of plain lines become background-vocal lines
+    (like Apple's x-bg spans), so they can be left out of the Rocksmith vocals."""
     content = content.lstrip("﻿")
     offset_ms = 0.0
     title = artist = ""
@@ -158,10 +170,14 @@ def parse_lrc(content: str, path: str = "") -> SourceLyrics:
             end = pieces[-1].end if pieces else next_t
             lines.append(SourceLine(pieces, t, end, agent=agent))
         else:
-            words = body.split()
-            pieces = [SourcePiece(w, None, None) for w in words]
-            if pieces:
+            main, bgs = _split_background(body) if split_background else (body, [])
+            if main:
+                pieces = [SourcePiece(w, None, None) for w in main.split()]
                 pieces[0].start = t
-            lines.append(SourceLine(pieces, t, next_t, agent=agent))
+                lines.append(SourceLine(pieces, t, next_t, agent=agent))
+            for bg in bgs:
+                pieces = [SourcePiece(w, None, None) for w in f"({bg})".split()]
+                pieces[0].start = t
+                lines.append(SourceLine(pieces, t, next_t, background=True, agent=agent))
     timing = "syllable" if any_joined else ("word" if any_enhanced else "line")
     return SourceLyrics(lines=lines, timing=timing, path=path, title=title, artist=artist)

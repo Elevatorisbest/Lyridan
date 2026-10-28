@@ -163,6 +163,13 @@ class MainWindow(QMainWindow):
             if sc:
                 a.setShortcut(sc)
             fm.addAction(a)
+        tm = mb.addMenu("&Tools")
+        self.act_align = QAction("Align lyrics to song audio (experimental)…", self)
+        self.act_align.triggered.connect(self.align_to_audio)
+        tm.addAction(self.act_align)
+        a = QAction("Remove downloaded alignment model", self)
+        a.triggered.connect(self.remove_model)
+        tm.addAction(a)
         dm = mb.addMenu("&Dictionaries")
         a = QAction("English syllables…", self)
         a.triggered.connect(self.edit_en_dict)
@@ -286,6 +293,20 @@ class MainWindow(QMainWindow):
                      "Right-click a line to reset it.")
         tip.setWordWrap(True)
         lay.addWidget(tip)
+        from .align_dialog import LRC_WARNING
+        self.lrc_banner = QFrame()
+        self.lrc_banner.setStyleSheet("QFrame{background:#fff4d6; border:1px solid #f5a524; border-radius:6px;}"
+                                      "QLabel{color:#4a3500; border:none;}")
+        bl = QHBoxLayout(self.lrc_banner)
+        bl.setContentsMargins(10, 6, 10, 6)
+        warn = QLabel("⚠ " + LRC_WARNING)
+        warn.setWordWrap(True)
+        bl.addWidget(warn, 1)
+        self.btn_align = QPushButton("Align to song audio (experimental)…")
+        self.btn_align.clicked.connect(self.align_to_audio)
+        bl.addWidget(self.btn_align)
+        self.lrc_banner.setVisible(False)
+        lay.addWidget(self.lrc_banner)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Time", "Source", "Syllables (editable)", "Notes"])
         hh = self.table.horizontalHeader()
@@ -694,8 +715,40 @@ class MainWindow(QMainWindow):
         timing = {"syllable": "syllable-synced", "word": "word-synced", "line": "line-synced",
                   "none": "not synced"}.get(src.timing, src.timing)
         extra = ", includes romaji" if src.has_romaji else ""
+        if src.timing in ("line", "none"):
+            extra += "  ⚠ not recommended"
         self.lyrics_card.set_file(path, f"{len(src.lines)} lines, {timing}{extra}")
+        self._update_lrc_banner()
         self.recalculate()
+
+    def _update_lrc_banner(self):
+        self.lrc_banner.setVisible(bool(self.source) and self.source.timing in ("line", "none"))
+
+    def use_aligned_source(self, src):
+        """Use audio-aligned lyrics without saving them to a file."""
+        self.source = src
+        self.overrides = {}
+        self.lyrics_card.set_file(self.source_path, f"{len(src.lines)} lines, audio-aligned (not saved)")
+        self._update_lrc_banner()
+        self.recalculate()
+
+    def align_to_audio(self):
+        from .align_dialog import run_alignment
+        if not self.source:
+            QMessageBox.information(self, "Lyridan", "Load a .lrc lyrics file first.")
+            return
+        run_alignment(self)
+
+    def remove_model(self):
+        from ..align import ModelStore
+        st = ModelStore()
+        if not st.is_installed():
+            QMessageBox.information(self, "Lyridan", "The alignment model is not downloaded.")
+            return
+        if QMessageBox.question(self, "Lyridan", "Delete the downloaded alignment model (~340 MB)?") == \
+                QMessageBox.Yes:
+            st.remove()
+            self.statusBar().showMessage("Alignment model removed.", 5000)
 
     def load_beatmap(self, path: str):
         try:
@@ -726,6 +779,7 @@ class MainWindow(QMainWindow):
         self.source_path = None
         self.overrides = {}
         self.lyrics_card.set_file(None)
+        self._update_lrc_banner()
         self.recalculate()
 
     def clear_beatmap(self):
@@ -871,6 +925,9 @@ class MainWindow(QMainWindow):
             items += [("warn", w) for w in res.warnings]
         if not self.beatmap and self.source:
             items.insert(0, ("warn", "No beatmap loaded: lyrics are not snapped to the chart's beat grid."))
+        if self.source and self.source.timing in ("line", "none"):
+            items.insert(0, ("warn", "Line-synced .lrc: syllable timing is only estimated and likely inaccurate. "
+                                     "Prefer a syllable-synced .ttml, or use Tools → Align lyrics to song audio."))
         for kind, text in items:
             it = QListWidgetItem(("⚠ " if kind == "warn" else "• ") + text)
             if kind == "warn":

@@ -15,6 +15,7 @@ Version 2.0 is a full rewrite of the app.
 | Native-script export | — | ✅ kana/kanji (JVocals) | ✅ Cyrillic |
 
 - **Inputs:** Apple Music syllable-synced TTML (raw TTML or the JSON API response), word- or line-synced TTML, plain LRC, and enhanced LRC (`<mm:ss.xx>` word tags).
+  **Syllable-synced `.ttml` is strongly recommended** - see [Why .lrc is not recommended](#why-lrc-is-not-recommended).
 - **Uses Apple's own syllable splits.** If the TTML splits a word (`para` + `dise`), those splits are kept and timed exactly.
 - **Beat sync:** load any arrangement XML from your chart (lead, rhythm or bass). Every syllable is snapped to its beat grid (1/4 to 1/64 notes, triplets included, time-signature aware).
 - **Charting guidelines** are toggles. Lyridan applies the offset for your audio's intro silence (10 s by default) and two empty bars (measured from your beatmap), and warns if a lyric would land inside them.
@@ -43,6 +44,30 @@ The total is shown at the bottom of the window. With the defaults, the bundled t
 - The first lyric is on the exact same 1/16 grid point.
 
 If your chart's audio was prepared differently, turn off the toggles that don't apply and use the manual offset. The timeline shows the result against your chart notes.
+
+## Why .lrc is not recommended
+
+A normal `.lrc` file only says when each **line** starts. Lyridan then has to *guess* when every syllable inside the line is sung, so the timing of plain `.lrc` lyrics is **likely to be poor** - on the test song only 3% of syllables landed within a 1/16 note of the hand-made chart, compared to 93% from Apple's syllable-synced `.ttml`. Use a syllable-synced `.ttml` whenever you can; the app shows a warning whenever an `.lrc` is loaded.
+
+### Experimental: align an .lrc to the song audio
+
+If an `.lrc` is all you have, **Tools → Align lyrics to song audio (experimental)** (or the button in the warning) can turn it into a syllable-synced `.ttml`:
+
+1. Choose the song audio - your chart's audio, the original song, or best of all an isolated **vocal stem** (UVR, Demucs…).
+2. Lyridan finds where the lyrics start in that audio (it recognises a chart's intro silence + empty bars automatically), then uses Meta's multilingual **MMS forced-alignment** speech model (run locally through ONNX Runtime) to find where every syllable is actually sung, using the `.lrc` line timestamps as anchors. Parenthesised backing-vocal parts of `.lrc` lines become background lines.
+3. The result is saved as a normal syllable-synced `.ttml` you can keep, fix and reuse.
+
+Measured on *Baby Be Mine* (plain `.lrc` + chart audio, compared to the hand-made Rocksmith chart):
+
+| input | same 1/16 grid point | within a 1/16 note | median difference |
+|---|---|---|---|
+| Apple syllable `.ttml` | 175 / 405 | 93% | 68 ms |
+| plain `.lrc`, estimated | 3 / 405 | 3% | 818 ms |
+| plain `.lrc` + audio alignment | 230 / 405 | 84% | 1 ms |
+
+Results **vary from song to song**: dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder, and mistakes cluster in such passages. Treat it as a strong starting point and check everything by ear. A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
+
+The model (~340 MB) is **downloaded on first use** after you accept its licence (see [Credits and licenses](#credits-and-licenses)) and can be removed again from the Tools menu. Command line: `python -m lyridan align song.lrc song.ogg -b chart.xml --yes`.
 
 ## Language details
 
@@ -99,6 +124,7 @@ Command line (also works with the installed app):
 ```bash
 python -m lyridan convert song.ttml -b "2_Bass_RS2.xml" -o "1_Vocals_RS2.xml" [--native-output JVocals.xml]
 python -m lyridan text song.lrc          # print syllabized / romanized lyrics
+python -m lyridan align song.lrc song.ogg -b chart.xml --yes   # experimental: .lrc -> syllable .ttml
 python -m lyridan convert --help         # all options
 ```
 
@@ -157,6 +183,15 @@ Lyridan is GPL-2.0. It uses:
 - fugashi (MIT) and MeCab (BSD)
 - UniDic-lite (BSD)
 - the CMU Pronouncing Dictionary (BSD)
+- ONNX Runtime (MIT), NumPy (BSD), soundfile / libsndfile (BSD / LGPL), python-soxr (LGPL), certifi (MPL-2.0)
 - OpenCorpora data via pymorphy3 (CC BY-SA, ё list)
+
+The optional alignment model is **not** part of Lyridan's code or installers. It is downloaded separately on first use:
+
+- **Model:** the MMS forced aligner by Meta AI (V. Pratap et al., [*Scaling Speech Technology to 1,000+ Languages*](https://arxiv.org/abs/2305.13516), 2023), distributed through [torchaudio](https://docs.pytorch.org/audio/main/generated/torchaudio.pipelines.MMS_FA.html).
+- **Licence:** [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), **non-commercial use only**. That fits Lyridan, a free charting tool; it must not be used commercially.
+- **Changes:** the Lyridan project exported it to ONNX and quantized it to 8-bit (`tools/export_alignment_model.py`).
+- **Hosting:** the converted files are published, with this attribution, as the `alignment-model-v1` release by `.github/workflows/alignment-model.yml`.
+- **Your code's licence:** the model's licence covers the model files only. Lyridan's source code stays GPL-2.0.
 
 Made by Elevatorisbest.

@@ -80,7 +80,10 @@ def about_text() -> str:
             "Japanese: MeCab via fugashi (MIT), UniDic-lite (BSD).<br>"
             "English: curated karaoke syllable dictionary, CMU Pronouncing Dictionary (BSD), "
             "trained boundary model for unknown words.<br>"
-            "Russian: ё dictionary derived from OpenCorpora (CC BY-SA) via pymorphy3.</p>"
+            "Russian: ё dictionary derived from OpenCorpora (CC BY-SA) via pymorphy3.<br>"
+            "Experimental audio alignment (optional download): MMS forced aligner by Meta AI "
+            "(Pratap et al., 2023), converted to ONNX/int8 by the Lyridan project - "
+            "CC BY-NC 4.0, non-commercial use only.</p>"
             "<p>Licensed under GPL-2.0.</p>")
 
 
@@ -96,7 +99,9 @@ your own charting.</p>
 or have it checked by other charters before publishing.</li>
 <li>Syllable splits, romanization / latinization, line breaks and timing can contain mistakes.</li>
 <li>The quality of the lyrics and of the sync <b>depends on the source file</b> (for example a .ttml from
-Apple Music) and <b>varies from song to song</b>. Line-synced .lrc files only give estimated syllable timing.</li>
+Apple Music) and <b>varies from song to song</b>. <b>Line-synced .lrc files are not recommended</b>: their
+syllable timing is estimated (or, with the experimental audio alignment, detected by an AI model) and is far
+less reliable than a syllable-synced .ttml.</li>
 <li>The sync assumes your chart's audio matches the source (intro silence, empty bars, offsets) - check the
 first and last lines in particular.</li>
 </ul>
