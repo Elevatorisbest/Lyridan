@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Dict
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel,
-                               QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout)
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView,
+                               QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from .. import APP_NAME, AUTHOR
 from .. import buildinfo
@@ -82,3 +82,79 @@ def about_text() -> str:
             "trained boundary model for unknown words.<br>"
             "Russian: ё dictionary derived from OpenCorpora (CC BY-SA) via pymorphy3.</p>"
             "<p>Licensed under GPL-2.0.</p>")
+
+
+DISCLAIMER_SECONDS = 15
+
+DISCLAIMER_HTML = """
+<h3 style="margin-bottom:4px">Lyridan is an experimental assistance tool</h3>
+<p>The vocals XML you are about to export is generated automatically. It is <b>not</b> a replacement for an
+accurate, hand-made Rocksmith vocal track and is meant <b>strictly as a starting point</b> to speed up
+your own charting.</p>
+<ul>
+<li><b>Always verify the result yourself</b> - in Editor on Fire, Charter or DLC Builder, against the song -
+or have it checked by other charters before publishing.</li>
+<li>Syllable splits, romanization / latinization, line breaks and timing can contain mistakes.</li>
+<li>The quality of the lyrics and of the sync <b>depends on the source file</b> (for example a .ttml from
+Apple Music) and <b>varies from song to song</b>. Line-synced .lrc files only give estimated syllable timing.</li>
+<li>The sync assumes your chart's audio matches the source (intro silence, empty bars, offsets) - check the
+first and last lines in particular.</li>
+</ul>
+"""
+
+
+class DisclaimerDialog(QDialog):
+    """Export disclaimer that can only be acknowledged after a countdown."""
+
+    def __init__(self, parent=None, seconds: int = DISCLAIMER_SECONDS):
+        super().__init__(parent)
+        self.setWindowTitle("Before you export")
+        self.setModal(True)
+        self.setMinimumWidth(560)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        self.remaining = seconds
+        lay = QVBoxLayout(self)
+        text = QLabel(DISCLAIMER_HTML)
+        text.setWordWrap(True)
+        text.setTextFormat(Qt.RichText)
+        lay.addWidget(text)
+        self.dont_show = QCheckBox("I understand - don't show this again")
+        lay.addWidget(self.dont_show)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        self.cancel = QPushButton("Cancel export")
+        self.cancel.clicked.connect(self.reject)
+        self.ok = QPushButton()
+        self.ok.setEnabled(False)
+        self.ok.setDefault(False)
+        self.ok.setAutoDefault(False)
+        self.ok.setMinimumWidth(220)
+        self.ok.clicked.connect(self.accept)
+        row.addWidget(self.cancel)
+        row.addWidget(self.ok)
+        lay.addLayout(row)
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self._tick)
+        self._update_button()
+        self._timer.start()
+
+    def _tick(self):
+        self.remaining -= 1
+        if self.remaining <= 0:
+            self._timer.stop()
+        self._update_button()
+
+    def _update_button(self):
+        if self.remaining > 0:
+            self.ok.setText(f"Please read… ({self.remaining} s)")
+            self.ok.setEnabled(False)
+        else:
+            self.ok.setText("I understand - export")
+            self.ok.setEnabled(True)
+            self.ok.setDefault(True)
+
+    def accept(self):
+        if self.remaining > 0:  # Enter key etc. cannot skip the countdown
+            return
+        super().accept()

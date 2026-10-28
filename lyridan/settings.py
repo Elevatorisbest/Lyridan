@@ -58,6 +58,9 @@ class Settings:
     ascii_only: bool = True                # Rocksmith default font is ASCII-only
     note_value: int = 0
 
+    # ---- notices ------------------------------------------------------------
+    disclaimer_acknowledged: bool = False  # "don't show again" on the export disclaimer
+
     # ---- other exports ------------------------------------------------------
     text_syllable_sep: str = "-"
     text_word_sep: str = " "

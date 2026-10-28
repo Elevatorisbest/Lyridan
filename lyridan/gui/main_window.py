@@ -19,7 +19,7 @@ from .. import APP_NAME, VERSION, buildinfo
 from ..parsers import load_lyrics
 from ..parsers.rsxml import Beatmap, VocalEntry, parse_beatmap, parse_vocals, write_vocals
 from ..settings import Settings, config_dir
-from .dialogs import DictDialog, about_text
+from .dialogs import DictDialog, DisclaimerDialog, about_text
 from .timeline import TimelineView
 
 LYRIC_FILTER = "Lyrics (*.ttml *.lrc *.elrc *.json *.xml *.txt);;All files (*)"
@@ -55,7 +55,10 @@ class _Warmup(QRunnable):
             get_japanese().tagger
         except Exception:
             pass
-        self.signals.done.emit()
+        try:
+            self.signals.done.emit()
+        except RuntimeError:  # window already closed
+            pass
 
 
 class FileCard(QFrame):
@@ -468,6 +471,10 @@ class MainWindow(QMainWindow):
         reset = QPushButton("Restore default settings")
         reset.clicked.connect(self.reset_settings)
         lay.addWidget(reset)
+        ack = QPushButton("Reset acknowledgements")
+        ack.setToolTip("Show the export disclaimer again")
+        ack.clicked.connect(self.reset_acknowledgements)
+        lay.addWidget(ack)
         lay.addWidget(self._build_info_group())
         lay.addStretch(1)
 
@@ -597,9 +604,30 @@ class MainWindow(QMainWindow):
         self._read_settings_from_ui()
         self._recalc_timer.start()
 
+    def reset_acknowledgements(self):
+        self.settings.disclaimer_acknowledged = False
+        self._disclaimer_seen_this_session = False
+        self.settings.save()
+        self.statusBar().showMessage("Acknowledgements reset - the export disclaimer will be shown again.", 6000)
+
+    def _confirm_disclaimer(self) -> bool:
+        """Shown before the first vocals export of each session until 'don't show again' is ticked."""
+        if self.settings.disclaimer_acknowledged or getattr(self, "_disclaimer_seen_this_session", False):
+            return True
+        dlg = DisclaimerDialog(self)
+        if not dlg.exec():
+            return False
+        self._disclaimer_seen_this_session = True
+        if dlg.dont_show.isChecked():
+            self.settings.disclaimer_acknowledged = True
+            self.settings.save()
+        return True
+
     def reset_settings(self):
         en = dict(self.settings.en_user_dict)
+        ack = self.settings.disclaimer_acknowledged
         self.settings = Settings()
+        self.settings.disclaimer_acknowledged = ack
         self.settings.en_user_dict = en
         self.settings.ja.user_dict = dict(self.ja_user_dict)
         self._load_settings_into_ui()
@@ -899,6 +927,8 @@ class MainWindow(QMainWindow):
     def export_vocals(self):
         if not (self.result and self.result.entries):
             return
+        if not self._confirm_disclaimer():
+            return
         path, _ = QFileDialog.getSaveFileName(self, "Save Rocksmith vocals", self._default_out("Vocals_RS2"),
                                               XML_FILTER)
         if not path:
@@ -910,6 +940,8 @@ class MainWindow(QMainWindow):
         from ..pipeline import process
         from ..rocksmith import build_vocals
         if not self.source:
+            return
+        if not self._confirm_disclaimer():
             return
         path, _ = QFileDialog.getSaveFileName(self, "Save native-script vocals",
                                               self._default_out("JVocals_RS2" if self.processed.language == "ja"
@@ -997,7 +1029,9 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Could not open project", str(e))
             return
+        ack = self.settings.disclaimer_acknowledged
         self.settings = Settings.from_json(data.get("settings", {}))
+        self.settings.disclaimer_acknowledged = ack
         self.ja_user_dict = dict(self.settings.ja.user_dict)
         self._load_settings_into_ui()
         self.overrides = {int(k): v for k, v in (data.get("overrides") or {}).items()}
