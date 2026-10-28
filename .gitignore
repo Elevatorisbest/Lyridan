@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec.bak
+.pytest_cache/
+.venv/
+venv/
+packaging/windows/version_info.txt
+*.lyridan
+.DS_Store

@@ -1,0 +1,128 @@
+name: Build Lyridan
+
+on:
+  push:
+    branches: [ "dev", "main" ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install fugashi unidic-lite pytest
+      - name: Tests
+        run: python -m pytest -q tests
+
+  windows:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V=$(python tools/write_build_info.py); else V=$(python tools/write_build_info.py --dev ${{ github.run_number }}); fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - name: PyInstaller
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/lyridan.spec
+      - name: Smoke test (frozen app converts English + Japanese)
+        shell: bash
+        run: |
+          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/baby_be_mine.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
+          for i in 1 2 3 4 5 6 7 8 9 10; do [ -f smoke_en.xml ] && [ -f smoke_ja.xml ] && break; sleep 2; done
+          grep -q 'lyric="Ki-"' smoke_ja.xml
+          grep -q 'count="419"' smoke_en.xml
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.ver.outputs.version }} packaging\windows\lyridan.iss
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\Lyridan\* -DestinationPath dist\Lyridan-${{ steps.ver.outputs.version }}-Windows-x64-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-Windows-x64
+          path: |
+            dist/*Setup.exe
+            dist/*portable.zip
+
+  macos:
+    needs: test
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15          # Apple Silicon (arm64)
+            arch: AppleSilicon
+          - runner: macos-15-intel    # Intel (x86_64)
+            arch: Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V=$(python tools/write_build_info.py); else V=$(python tools/write_build_info.py --dev ${{ github.run_number }}); fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - name: PyInstaller
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/lyridan.spec
+      - name: Smoke test (frozen app converts English + Japanese)
+        run: |
+          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/baby_be_mine.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
+          grep -q 'lyric="Ki-"' smoke_ja.xml
+          grep -q 'count="419"' smoke_en.xml
+      - name: DMG
+        run: bash packaging/macos/make_dmg.sh "${{ steps.ver.outputs.version }}" "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-macOS-${{ matrix.arch }}
+          path: dist/*.dmg
+
+  release:
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
