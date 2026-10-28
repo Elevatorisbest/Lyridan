@@ -1,49 +1,127 @@
-"""Write build metadata before packaging.
+"""Write build metadata before packaging (run by CI and by the local build scripts).
 
-  python tools/write_build_info.py [--dev N]
+  python tools/write_build_info.py [--channel dev|stable] [--print json|version]
 
-* lyridan/_build.py               BUILD label shown in the window title / About box
-* packaging/windows/version_info.txt   Windows file version resource
-Prints the full version string (e.g. 2.0.0 or 2.0.0-dev.37) for CI to reuse.
+Channel detection (when --channel is not given):
+  * GitHub Actions on branch "main" or on a "v*" tag  -> stable
+  * any other branch / pull request / local build      -> dev
+
+Outputs
+  * lyridan/_build.py                    BUILD_INFO dict read by lyridan/buildinfo.py
+  * packaging/windows/version_info.txt   Windows file-version resource
+Prints the version label used in file names, e.g. "2.0.0" or "2.0.0-dev.37".
 """
 import argparse
 import datetime
+import json
 import os
+import platform
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from lyridan import VERSION  # noqa: E402
 
-p = argparse.ArgumentParser()
-p.add_argument("--dev", type=int, help="dev build number")
-a = p.parse_args()
 
-label = f"{VERSION}-dev.{a.dev}" if a.dev else VERSION
-stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-with open(os.path.join(ROOT, "lyridan", "_build.py"), "w", encoding="utf-8") as fh:
-    fh.write(f'BUILD = "{label}"\nBUILD_DATE = "{stamp}"\n')
+def git(*args: str) -> str:
+    try:
+        return subprocess.check_output(["git", *args], cwd=ROOT, stderr=subprocess.DEVNULL,
+                                       text=True).strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
-nums = [int(x) for x in VERSION.split(".")[:3]] + [a.dev or 0]
-tup = ", ".join(map(str, nums))
-vi = f"""VSVersionInfo(
-  ffi=FixedFileInfo(filevers=({tup}), prodvers=({tup}), mask=0x3f, flags=0x0, OS=0x40004,
-                    fileType=0x1, subtype=0x0, date=(0, 0)),
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--channel", choices=["dev", "stable"])
+    p.add_argument("--print", dest="out", choices=["version", "json"], default="version")
+    a = p.parse_args()
+    env = os.environ
+
+    ref_type = env.get("GITHUB_REF_TYPE", "")
+    ref_name = env.get("GITHUB_REF_NAME", "")
+    if env.get("GITHUB_EVENT_NAME") == "pull_request":
+        branch = env.get("GITHUB_HEAD_REF", "") or ref_name
+    elif ref_type == "tag":
+        branch = ref_name
+    else:
+        branch = ref_name or git("rev-parse", "--abbrev-ref", "HEAD")
+    if a.channel:
+        channel = a.channel
+    elif env.get("GITHUB_ACTIONS") == "true" and (
+            (ref_type == "branch" and ref_name == "main") or (ref_type == "tag" and ref_name.startswith("v"))):
+        channel = "stable"
+    else:
+        channel = "dev"
+
+    commit = env.get("GITHUB_SHA") or git("rev-parse", "HEAD")
+    run_number = env.get("GITHUB_RUN_NUMBER", "")
+    run_id = env.get("GITHUB_RUN_ID", "")
+    repo = env.get("GITHUB_REPOSITORY", "")
+    server = env.get("GITHUB_SERVER_URL", "https://github.com")
+    build_no = run_number or git("rev-list", "--count", "HEAD") or "0"
+
+    label = VERSION if channel == "stable" else f"{VERSION}-dev.{build_no}"
+    info = {
+        "channel": channel,
+        "version": VERSION,
+        "label": label,
+        "build_number": build_no,
+        "run_attempt": env.get("GITHUB_RUN_ATTEMPT", ""),
+        "branch": branch,
+        "ref_type": ref_type or "branch",
+        "commit": commit,
+        "commit_short": commit[:7],
+        "commit_count": git("rev-list", "--count", "HEAD"),
+        "commit_date": git("log", "-1", "--format=%cI"),
+        "commit_subject": git("log", "-1", "--format=%s")[:200],
+        "commit_author": git("log", "-1", "--format=%an"),
+        "dirty": bool(git("status", "--porcelain", "--untracked-files=no")) and not env.get("GITHUB_ACTIONS"),
+        "build_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "builder": "GitHub Actions" if env.get("GITHUB_ACTIONS") == "true" else f"local ({platform.node()})",
+        "builder_os": env.get("RUNNER_OS") or platform.system(),
+        "builder_arch": env.get("RUNNER_ARCH") or platform.machine(),
+        "builder_image": env.get("ImageOS", "") or env.get("RUNNER_NAME", ""),
+        "build_python": platform.python_version(),
+        "workflow": env.get("GITHUB_WORKFLOW", ""),
+        "event": env.get("GITHUB_EVENT_NAME", ""),
+        "repo_url": f"{server}/{repo}" if repo else "",
+        "commit_url": f"{server}/{repo}/commit/{commit}" if repo and commit else "",
+        "run_url": f"{server}/{repo}/actions/runs/{run_id}" if repo and run_id else "",
+    }
+
+    with open(os.path.join(ROOT, "lyridan", "_build.py"), "w", encoding="utf-8") as fh:
+        fh.write("# Generated by tools/write_build_info.py - do not edit.\n")
+        fh.write("BUILD_INFO = " + json.dumps(info, indent=4, ensure_ascii=False)
+                 .replace(": true", ": True").replace(": false", ": False") + "\n")
+
+    nums = [int(x) for x in VERSION.split(".")[:3]] + [int(build_no) if channel == "dev" and build_no.isdigit() else 0]
+    tup = ", ".join(str(min(n, 65535)) for n in nums)
+    desc = "Lyridan - lyrics to Rocksmith vocals" + (" (development build)" if channel == "dev" else "")
+    vi = f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers=({tup}), prodvers=({tup}), mask=0x3f, flags={'0x2' if channel == 'dev' else '0x0'},
+                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
       StringStruct('CompanyName', 'Elevatorisbest'),
-      StringStruct('FileDescription', 'Lyridan - lyrics to Rocksmith vocals'),
+      StringStruct('FileDescription', '{desc}'),
       StringStruct('FileVersion', '{label}'),
       StringStruct('InternalName', 'Lyridan'),
       StringStruct('LegalCopyright', 'GPL-2.0'),
       StringStruct('OriginalFilename', 'Lyridan.exe'),
       StringStruct('ProductName', 'Lyridan'),
-      StringStruct('ProductVersion', '{label}')])]),
+      StringStruct('ProductVersion', '{label}{('+' + commit[:7]) if channel == 'dev' and commit else ''}'),
+      StringStruct('Comments', '{channel} build from {branch or "unknown"}')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
 )
 """
-os.makedirs(os.path.join(ROOT, "packaging", "windows"), exist_ok=True)
-with open(os.path.join(ROOT, "packaging", "windows", "version_info.txt"), "w", encoding="utf-8") as fh:
-    fh.write(vi)
-print(label)
+    os.makedirs(os.path.join(ROOT, "packaging", "windows"), exist_ok=True)
+    with open(os.path.join(ROOT, "packaging", "windows", "version_info.txt"), "w", encoding="utf-8") as fh:
+        fh.write(vi)
+    print(json.dumps(info, indent=2) if a.out == "json" else label)
+
+
+if __name__ == "__main__":
+    main()

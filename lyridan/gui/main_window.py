@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
                                QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget,
                                QToolButton, QVBoxLayout, QWidget)
 
-from .. import APP_NAME, DISPLAY_VERSION, VERSION
+from .. import APP_NAME, VERSION, buildinfo
 from ..parsers import load_lyrics
 from ..parsers.rsxml import Beatmap, VocalEntry, parse_beatmap, parse_vocals, write_vocals
 from ..settings import Settings, config_dir
@@ -95,7 +95,8 @@ class FileCard(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} {DISPLAY_VERSION}")
+        self.setWindowTitle(f"{APP_NAME} {buildinfo.display_version()}"
+                            + ("  [DEV BUILD]" if buildinfo.is_dev() else ""))
         icon = _resource("lyridanlogo.ico") or _resource("lyridanlogo.png")
         if icon:
             self.setWindowIcon(QIcon(icon))
@@ -124,6 +125,12 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_ui()
         self._load_settings_into_ui()
+        if buildinfo.is_dev():
+            i = buildinfo.info()
+            tag = QLabel(f" DEV #{i.get('build_number', '?')} · {i.get('branch', '')} @ {i.get('commit_short', '')} ")
+            tag.setStyleSheet("background:#f5a524; color:black; font-weight:bold; border-radius:3px;")
+            tag.setToolTip(buildinfo.as_text())
+            self.statusBar().addPermanentWidget(tag)
         self.statusBar().showMessage("Loading language dictionaries…")
         w = _Warmup()
         w.signals.done.connect(lambda: self.statusBar().showMessage("Ready - drop a .ttml/.lrc file and a Rocksmith XML", 8000))
@@ -461,6 +468,7 @@ class MainWindow(QMainWindow):
         reset = QPushButton("Restore default settings")
         reset.clicked.connect(self.reset_settings)
         lay.addWidget(reset)
+        lay.addWidget(self._build_info_group())
         lay.addStretch(1)
 
         # change notifications
@@ -474,6 +482,32 @@ class MainWindow(QMainWindow):
             sp.valueChanged.connect(self._settings_changed)
         S.le_punct.textChanged.connect(self._settings_changed)
         return w
+
+    def _build_info_group(self) -> QGroupBox:
+        """Stable builds: just the version. Dev builds: full build/commit/runtime details."""
+        g = QGroupBox("Build information")
+        f = QFormLayout(g)
+        f.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        if buildinfo.is_dev():
+            badge = QLabel("DEVELOPMENT BUILD - may be unstable")
+            badge.setStyleSheet("background:#f5a524; color:black; font-weight:bold; padding:3px 6px; "
+                                "border-radius:4px;")
+            f.addRow(badge)
+        for k, v in buildinfo.details():
+            lbl = QLabel(v)
+            lbl.setWordWrap(True)
+            lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            f.addRow(k, lbl)
+        for k, url in buildinfo.links():
+            lbl = QLabel(f'<a href="{url}">{url.split("/")[-1][:12] if "commit" in url else "open"}</a>')
+            lbl.setOpenExternalLinks(True)
+            f.addRow(k, lbl)
+        if buildinfo.is_dev():
+            copy = QPushButton("Copy build info (for bug reports)")
+            copy.clicked.connect(lambda: (QApplication.clipboard().setText(buildinfo.as_text()),
+                                          self.statusBar().showMessage("Build info copied", 4000)))
+            f.addRow(copy)
+        return g
 
     # ------------------------------------------------------------ settings <-> UI
     @staticmethod

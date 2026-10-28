@@ -5,7 +5,8 @@ setlocal
 cd /d "%~dp0"
 python -m pip install --upgrade pip || goto :error
 python -m pip install -r requirements.txt pyinstaller || goto :error
-for /f "delims=" %%v in ('python tools\write_build_info.py') do set LYRIDAN_VERSION=%%v
+REM Pass --channel stable for a release build (default: dev, with detailed build info)
+for /f "delims=" %%v in ('python tools\write_build_info.py %*') do set LYRIDAN_VERSION=%%v
 python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging\lyridan.spec || goto :error
 where iscc >nul 2>nul
 if %errorlevel%==0 (

@@ -29,7 +29,7 @@ a = Analysis(
     pathex=[ROOT],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["fugashi", "unidic_lite", "shlex", "csv", "collections", "site"],
+    hiddenimports=["fugashi", "unidic_lite", "lyridan._build", "shlex", "csv", "collections", "site"],
     excludes=excludes,
     noarchive=False,
 )

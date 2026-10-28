@@ -7,7 +7,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel,
                                QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout)
 
-from .. import APP_NAME, AUTHOR, BUILD_DATE, DISPLAY_VERSION
+from .. import APP_NAME, AUTHOR
+from .. import buildinfo
 
 
 class DictDialog(QDialog):
@@ -64,8 +65,14 @@ class DictDialog(QDialog):
 
 
 def about_text() -> str:
-    return (f"<h2>{APP_NAME} {DISPLAY_VERSION}</h2>"
-            + (f"<p style='color:gray'>Built {BUILD_DATE}</p>" if BUILD_DATE else "")
+    i = buildinfo.info()
+    build = ""
+    if buildinfo.is_dev():
+        build = (f"<p style='color:gray'>Development build #{i.get('build_number', '?')} · "
+                 f"{i.get('branch', '')} @ {i.get('commit_short', '')}"
+                 + (f" · {i['build_date']}" if i.get("build_date") else "")
+                 + "<br>Full details: Settings panel → Build information.</p>")
+    return (f"<h2>{APP_NAME} {buildinfo.display_version()}</h2>" + build
             + f"<p>Synced lyrics (.ttml / .lrc) to Rocksmith 2014 vocal arrangements, with "
             f"syllabization and romanization for English, Japanese and Russian.</p>"
             f"<p>Made by {AUTHOR}.</p>"

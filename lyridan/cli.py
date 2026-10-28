@@ -68,7 +68,10 @@ def main(argv=None):
         return run()
     _ensure_console()
     if argv[0] == "--version":
-        print(f"Lyridan {VERSION}")
+        from . import buildinfo
+        print(f"Lyridan {buildinfo.display_version()}")
+        if "-v" in argv or "--verbose" in argv or buildinfo.is_dev():
+            print(buildinfo.as_text())
         return 0
     p = argparse.ArgumentParser(prog="lyridan", description=f"Lyridan {VERSION}")
     sub = p.add_subparsers(dest="cmd")

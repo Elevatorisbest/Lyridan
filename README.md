@@ -114,12 +114,19 @@ python Lyridan.py            # run the app
 
 - **Windows installer:** `build_windows.bat` (needs Inno Setup 6 for the installer step).
 - **macOS app + DMG:** `bash build_macos.sh` (builds for the architecture of the Mac it runs on).
-- **CI:** `.github/workflows/build.yml` runs the tests and builds:
-  - the Windows installer and portable zip
-  - a DMG for Apple Silicon (`macos-15`)
-  - a DMG for Intel (`macos-15-intel`)
+- **CI** (`.github/workflows/build.yml`): every push runs the tests, then builds:
+  - Windows: installer + portable zip
+  - macOS Apple Silicon (`macos-15`) and Intel (`macos-15-intel`): `.pkg` installer + `.dmg`
 
-  This happens on every push to `dev` / `main`. Pushing a `v*` tag publishes a GitHub release. Dev builds are labelled `2.0.0-dev.<run>`.
+  Each frozen app is smoke-tested before packaging.
+
+| Push to | Channel | Version shown | Published as |
+|---|---|---|---|
+| `dev` (or any other branch) | dev | `2.0.0-dev.<run> (<commit>)` with full build info in **Settings → Build information** (branch, commit, message, build number, build machine, workflow run link, runtime library versions, "Copy build info" button) and a DEV badge | rolling pre-release **dev-latest** + workflow artifacts |
+| `main` | stable | `2.0.0` only | GitHub release **v2.0.0** (re-uploaded if `VERSION` wasn't bumped) |
+| tag `v*` | stable | `2.0.0` only | release for that tag |
+
+Bump `VERSION` in `lyridan/__init__.py` before merging to `main` to get a new release. Local builds are dev builds unless you pass `--channel stable` (`build_windows.bat --channel stable`, `bash build_macos.sh --channel stable`). `python -m lyridan --version` prints the same build info.
 
 The bundled language data can be rebuilt with the scripts in `tools/`:
 
