@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import ssl
+import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
@@ -23,12 +24,28 @@ MODEL_INFO = {
 }
 
 
-def _ssl_context() -> ssl.SSLContext:
+def _contexts():
+    """System certificate store first (works behind company proxies / custom CAs),
+    then the bundled certifi list (needed by some macOS Python builds)."""
+    yield ssl.create_default_context()
     try:
         import certifi
-        return ssl.create_default_context(cafile=certifi.where())
+        yield ssl.create_default_context(cafile=certifi.where())
     except Exception:  # noqa: BLE001
-        return ssl.create_default_context()
+        pass
+
+
+def _open(url: str, timeout: int = 60):
+    last = None
+    for ctx in _contexts():
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Lyridan"})
+            return urllib.request.urlopen(req, context=ctx, timeout=timeout)
+        except urllib.error.URLError as e:
+            last = e
+            if not isinstance(getattr(e, "reason", None), ssl.SSLError):
+                raise
+    raise last
 
 
 class ModelStore:
@@ -56,13 +73,11 @@ class ModelStore:
 
     def download(self, progress: Optional[Callable[[int, int], bool]] = None) -> None:
         """Download model + metadata. ``progress(done, total)`` may return False to cancel."""
-        ctx = _ssl_context()
-        with urllib.request.urlopen(MODEL_INFO["meta_url"], context=ctx, timeout=60) as r:
+        with _open(MODEL_INFO["meta_url"]) as r:
             meta = json.loads(r.read().decode("utf-8"))
         part = self.model_path + ".part"
         h = hashlib.sha256()
-        req = urllib.request.Request(MODEL_INFO["url"], headers={"User-Agent": "Lyridan"})
-        with urllib.request.urlopen(req, context=ctx, timeout=60) as r, open(part, "wb") as out:
+        with _open(MODEL_INFO["url"]) as r, open(part, "wb") as out:
             total = int(r.headers.get("Content-Length") or meta.get("size") or 0)
             done = 0
             while True:
