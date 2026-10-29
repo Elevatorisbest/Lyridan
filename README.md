@@ -178,7 +178,7 @@ When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to s
 **What to expect:**
 - Results vary from song to song. Dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder.
 - Lines the model can barely hear are listed as **hard to hear**. They lean on their `.lrc` timestamps instead of being squeezed into the wrong place - check them first.
-- **A vocal stem helps most exactly there.** In our tests on *Ghost Sequence*, the full mix gave almost no usable signal for one heavily layered English line, while a UVR5 stem placed it correctly. On *Baby Be Mine*, a stem cut the syllables that were off by more than half a second from 45 to 29 (of 419).
+- **A vocal stem helps most exactly there.** In our tests on *Ghost Sequence* (a Japanese song), the full mix gave almost no usable signal for one heavily layered English line, while a UVR5 stem placed it correctly. On *Baby Be Mine*, a stem cut the syllables that were off by more than half a second from 45 to 29 (of 419).
 - A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
 
 **Japanese kanji readings are checked against the audio too.** Some kanji have several readings, and songs often use a less common one (緋 is normally read *hi*, but some songs sing it *aka*).
