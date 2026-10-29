@@ -250,4 +250,34 @@ def test_russian_phrase_aware_split():
     out = _rs_lines(process(src, s).lines, s)
     assert len(out) == 2
     assert not out[0].lower().endswith((" ne", " na", " v", " i"))
-    assert out[1].lower().startswith("ne mogu")
+    assert out == ["Pro to chto bolshe ne mogu", "Smotret na dermo"]   # "ne mogu" stays together
+
+
+def _rs_lines_lrc(lrc_text, **kw):
+    from lyridan.parsers.lrc import parse_lrc
+    s = Settings()
+    for k, v in kw.items():
+        setattr(s, k, v)
+    res = build_vocals(process(parse_lrc(lrc_text), s).lines, s, None)
+    lines, cur = [], ""
+    for e in res.entries:
+        l = e.lyric
+        cur += l[:-1] if l[-1] in "-+" else l + " "
+        if l.endswith("+"):
+            lines.append(cur.strip())
+            cur = ""
+    return lines
+
+
+def test_line_phrasing_syllable_limit():
+    ru = _rs_lines_lrc("[00:10.00]Но, впрочем, в той тени, где я, пока и сухо, и тепло\n"
+                   "[00:16.00]И, в общем, весело живём, хотя и дождь за окном\n"
+                   "[00:22.00]Про то, что больше не могу смотреть на дерьмо\n[00:28.00]\n")
+    assert ru == ["No vprochem v toy teni gde ya", "Poka i sukho i teplo",
+                  "I v obshchem veselo zhivyom", "Khotya i dozhd za oknom",
+                  "Pro to chto bolshe ne mogu", "Smotret na dermo"]
+    en = _rs_lines_lrc("[00:10.00]Share my feelings in the heat of love's embrace\n[00:15.00]\n")
+    assert en == ["Share my feelings", "In the heat of love's embrace"]
+    # limit off -> one line
+    assert len(_rs_lines_lrc("[00:10.00]Share my feelings in the heat of love's embrace\n[00:15.00]\n",
+                         max_line_syllables=0, max_line_chars=0)) == 1

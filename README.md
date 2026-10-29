@@ -19,7 +19,12 @@ Version 2.0 is a full rewrite of the app.
 - **Uses Apple's own syllable splits.** If the TTML splits a word (`para` + `dise`), those splits are kept and timed exactly.
 - **Beat sync:** load any arrangement XML from your chart (lead, rhythm or bass). Every syllable is snapped to its beat grid (1/4 to 1/64 notes, triplets included, time-signature aware).
 - **Charting guidelines** are toggles. Lyridan applies the offset for your audio's intro silence (10 s by default) and two empty bars (measured from your beatmap), and warns if a lyric would land inside them.
-- **Rocksmith formatting:** `-` / `+` markup, line splitting at pauses and by length, first word of each line capitalized, punctuation cleanup, ASCII-safe characters for the stock font.
+- **Rocksmith formatting:** `-` / `+` markup, first word of each line capitalized, punctuation cleanup, ASCII-safe characters for the stock font.
+- **Phrase-aware line breaks:** lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:
+  - commas and real pauses are preferred break points
+  - words that belong together are never torn apart: articles and prepositions stay with their noun, Russian "не" with its verb, Japanese particles with their word
+  - tiny fragments are avoided, e.g. "Ya / zhdu otveta" becomes "Ya zhdu otveta"
+  - a line one or two syllables over the limit is kept whole when splitting it would read worse
 - **Editing:** fix any line in the editor (`Eve-ry mo-ment / Takes me to pa-ra-dise`). Lyridan keeps the timing and `/` forces a line break.
 - **Timeline:** shows your chart's measures, sections and notes next to the generated vocals, plus an optional reference vocals XML to compare against.
 - **Projects** (`.lyridan`) save the files, settings and your edits. **User dictionaries** hold your own English syllable splits and Japanese readings.

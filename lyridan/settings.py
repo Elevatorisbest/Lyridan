@@ -51,7 +51,8 @@ class Settings:
     background: str = "exclude"            # exclude | nonoverlap
 
     # ---- Rocksmith formatting -------------------------------------------------
-    max_line_chars: int = 30
+    max_line_syllables: int = 8            # charter rule of thumb: 7-8 sung syllables per line
+    max_line_chars: int = 40
     gap_split_seconds: float = 0.75
     capitalize_lines: bool = True
     keep_punctuation: str = "?!"

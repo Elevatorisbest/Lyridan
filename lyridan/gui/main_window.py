@@ -467,6 +467,13 @@ class MainWindow(QMainWindow):
 
         # formatting
         g, f = self._group("Rocksmith formatting")
+        S.sp_maxsyl = QSpinBox()
+        S.sp_maxsyl.setRange(0, 40)
+        S.sp_maxsyl.setSpecialValueText("No limit")
+        S.sp_maxsyl.setSuffix(" syllables")
+        S.sp_maxsyl.setToolTip("Charters keep a Rocksmith lyric line to about 7-8 sung syllables. Lines 1-2 over "
+                               "are kept whole when any split would leave an awkward fragment. Japanese gets +4.")
+        f.addRow("Max syllables per line", S.sp_maxsyl)
         S.sp_maxchars = QSpinBox()
         S.sp_maxchars.setRange(0, 200)
         S.sp_maxchars.setSpecialValueText("No limit")
@@ -506,7 +513,7 @@ class MainWindow(QMainWindow):
         for ck in (S.ck_ja_apos, S.ck_ja_lyric, S.ck_ja_apple, S.ck_ja_foreign, S.ck_ru_yo, S.ck_ru_soft,
                    S.ck_hyphen, S.ck_silence, S.ck_bars, S.ck_lyricoff, S.ck_leading, S.ck_caps, S.ck_ascii):
             ck.toggled.connect(self._settings_changed)
-        for sp in (S.sp_silence, S.sp_bars, S.sp_manual, S.sp_maxchars, S.sp_gapsplit, S.sp_note):
+        for sp in (S.sp_silence, S.sp_bars, S.sp_manual, S.sp_maxsyl, S.sp_maxchars, S.sp_gapsplit, S.sp_note):
             sp.valueChanged.connect(self._settings_changed)
         S.le_punct.textChanged.connect(self._settings_changed)
         return w
@@ -573,6 +580,7 @@ class MainWindow(QMainWindow):
             self._set_combo(S.cb_gap, s.min_gap)
             self._set_combo(S.cb_weight, s.syllable_weighting)
             self._set_combo(S.cb_bg, s.background)
+            S.sp_maxsyl.setValue(s.max_line_syllables)
             S.sp_maxchars.setValue(s.max_line_chars)
             S.sp_gapsplit.setValue(s.gap_split_seconds)
             S.ck_caps.setChecked(s.capitalize_lines)
@@ -612,6 +620,7 @@ class MainWindow(QMainWindow):
         s.min_gap = S.cb_gap.currentData()
         s.syllable_weighting = S.cb_weight.currentData()
         s.background = S.cb_bg.currentData()
+        s.max_line_syllables = S.sp_maxsyl.value()
         s.max_line_chars = S.sp_maxchars.value()
         s.gap_split_seconds = S.sp_gapsplit.value()
         s.capitalize_lines = S.ck_caps.isChecked()

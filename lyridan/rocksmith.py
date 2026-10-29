@@ -174,8 +174,11 @@ def split_lines(lines: List[Line], settings: Settings, native_cjk: bool = False)
             ct.append(t)
         chunks.append((cw, ct))
         # 2) split chunks that are too long
+        max_syl = settings.max_line_syllables
+        if max_syl > 0 and ln.lang == "ja":
+            max_syl += 4    # Japanese morae are short; 8 would chop every phrase
         for cw, ct in chunks:
-            for part in _split_long(cw, ct, settings.max_line_chars, native_cjk):
+            for part in _split_long(cw, ct, settings.max_line_chars, native_cjk, max_syl):
                 out.append(RSLine(*part))
     return out
 
@@ -244,45 +247,102 @@ def _starts_phrase(w: Word) -> bool:
 
 
 def _gap_split_ok(lw, lt, rw, rt, gap: float, cjk: bool) -> bool:
-    """Is a pause a good place for a new Rocksmith line?"""
-    def substantial(ws, ts):
-        return len(ws) >= 2 or _len(ts, cjk) >= (8 if not cjk else 6)
+    """Is a pause a good place for a new Rocksmith line?
+
+    A short breath should not leave a tiny line ("Ya" / "No vprochem"): both halves
+    need about 5 sung syllables, a longer pause (>= 1.5 s) accepts 3, and a pause of
+    3 s or more always starts a new line.
+    """
     if gap >= 3.0:                      # clearly separate phrases
         return True
-    if not (substantial(lw, lt) and substantial(rw, rt)):
+    need = 3 if gap >= 1.5 else 5
+    if cjk:
+        need += 2
+    if _syl(lt) < need or _syl(rt) < need:
         return False
     return not _binds_right(lw[-1]) and not _binds_left(rw[0])
 
 
-def _split_long(words: List[Word], texts: List[List[str]], max_chars: int, cjk: bool):
-    if max_chars <= 0 or _len(texts, cjk) <= max_chars or len(words) < 2:
+def _syl(texts: List[List[str]]) -> int:
+    """Sung syllables (Rocksmith notes) in a group of words."""
+    return sum(1 for t in texts for x in t if x.strip())
+
+
+def _too_long(texts, max_chars: int, max_syl: int, cjk: bool) -> bool:
+    return (max_syl > 0 and _syl(texts) > max_syl) or (max_chars > 0 and _len(texts, cjk) > max_chars)
+
+
+def _split_long(words: List[Word], texts: List[List[str]], max_chars: int, cjk: bool, max_syl: int = 0):
+    """Split a phrase that is too long for one Rocksmith line.
+
+    Charters keep a line to about 7-8 sung syllables. All ways of breaking the
+    phrase are compared at once (dynamic programming) and the cheapest wins:
+      * each line costs 1 (fewer lines are better when they fit),
+      * a line 1-2 syllables over the limit costs a little, more costs a lot,
+      * a line under 5 syllables costs more the shorter it is ("Ya" / "No vprochem"),
+      * breaking after punctuation or at a pause is rewarded, breaking between words
+        that belong together (preposition + noun, "ne" + verb, particles) is penalised.
+    """
+    n = len(words)
+    if n < 2 or not _too_long(texts, max_chars, max_syl, cjk):
         return [(words, texts)]
-    total = _len(texts, cjk)
-    best_i, best_score = None, None
-    for i in range(1, len(words)):
-        left, right = _len(texts[:i], cjk), _len(texts[i:], cjk)
-        score = -abs(left - right) / max(1, total) * 2.0
-        gap = words[i].start - words[i - 1].end
-        score += min(gap, 1.0) * 3.0
-        if left >= right:
-            score += 0.02
+    syl = [_syl([t]) for t in texts]
+    limit = max_syl if max_syl > 0 else 10 ** 6
+    ideal = min(7, limit) if max_syl > 0 else None
+    short = 5 if not cjk else 6
+
+    def line_cost(i: int, j: int) -> float:
+        sy = sum(syl[i:j])
+        c = 1.0
+        over = sy - limit
+        if over > 0:
+            c += 0.8 * over if over <= 2 else 1.6 + 3.0 * (over - 2)
+        if sy < short and not (i == 0 and j == n):
+            c += 1.0 * (short - sy)
+        if ideal is not None:
+            c += 0.1 * abs(sy - ideal)
+        if max_chars > 0:
+            ln = _len(texts[i:j], cjk)
+            if ln > max_chars:
+                c += ((ln - max_chars) / 5.0) ** 2
+        return c
+
+    def break_cost(i: int) -> float:  # break between words[i-1] and words[i]
+        c = 0.0
         if words[i - 1].suffix and re.search(r"[,.;:!?、。！？]", words[i - 1].suffix):
-            score += 1.2
-        if i < 2 or len(words) - i < 2:
-            score -= 0.6
+            c -= 1.2
+        c -= min(max(0.0, words[i].start - words[i - 1].end), 1.0) * 3.0
         if _binds_right(words[i - 1]):
-            score -= 0.6
+            c += 1.5          # "...in the" / "heat of..." - worse than a short line
         if _binds_left(words[i]):
-            score -= 0.8
+            c += 1.5
         if _starts_phrase(words[i]):
-            score += 0.2
-        if left > max_chars or right > max_chars:
-            score -= 0.3
-        if best_score is None or score > best_score:
-            best_i, best_score = i, score
-    i = best_i
-    return (_split_long(words[:i], texts[:i], max_chars, cjk) +
-            _split_long(words[i:], texts[i:], max_chars, cjk))
+            c -= 0.2
+        return c
+
+    INF = float("inf")
+    best = [INF] * (n + 1)
+    back = [0] * (n + 1)
+    best[0] = 0.0
+    for j in range(1, n + 1):
+        for i in range(j):
+            if best[i] == INF:
+                continue
+            c = best[i] + line_cost(i, j) + (break_cost(i) if i > 0 else 0.0)
+            # tie-break: prefer the longer first line (ends phrases on stronger words)
+            if c < best[j] - 1e-9 or (abs(c - best[j]) <= 1e-9 and i > back[j]):
+                best[j], back[j] = c, i
+    cuts = []
+    j = n
+    while j > 0:
+        cuts.append(back[j])
+        j = back[j]
+    cuts = sorted(c for c in cuts if c > 0)
+    out, last = [], 0
+    for c in cuts + [n]:
+        out.append((words[last:c], texts[last:c]))
+        last = c
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -377,9 +437,12 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
                             f"(they end at {bars_end:.3f}s).")
     if beatmap and beatmap.song_length and entries[-1].time > beatmap.song_length:
         warnings.append("Some lyrics are after the end of the song (songLength) - check the offset.")
-    long_lines = [l for l in rs_lines if l.display_len() > settings.max_line_chars + 8]
-    if long_lines and settings.max_line_chars > 0:
-        warnings.append(f"{len(long_lines)} line(s) are still longer than {settings.max_line_chars} characters.")
+    if settings.max_line_syllables > 0:
+        lim = settings.max_line_syllables
+        long_lines = [l for l in rs_lines if _syl(l.texts) > lim + (4 if l.words and l.words[0].lang == "ja" else 0) + 2]
+        if long_lines:
+            warnings.append(f"{len(long_lines)} line(s) still have more than {lim + 2} syllables - "
+                            f"consider splitting them by hand.")
     return ExportResult(entries, off, warnings, rs_lines)
 
 

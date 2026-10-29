@@ -31,6 +31,8 @@ def _settings_from_args(a):
         s.snap = a.snap
     if a.max_chars is not None:
         s.max_line_chars = a.max_chars
+    if a.max_syllables is not None:
+        s.max_line_syllables = a.max_syllables
     if a.background:
         s.background = a.background
     if a.ru_scheme:
@@ -89,6 +91,7 @@ def main(argv=None):
         sp.add_argument("--offset-ms", type=float)
         sp.add_argument("--snap")
         sp.add_argument("--max-chars", type=int)
+        sp.add_argument("--max-syllables", type=int, help="max sung syllables per Rocksmith line (default 8, 0 = off)")
         sp.add_argument("--background", choices=["exclude", "nonoverlap"])
 
     c = sub.add_parser("convert", help="create a Rocksmith vocals XML")
