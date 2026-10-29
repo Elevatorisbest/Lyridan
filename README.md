@@ -69,7 +69,7 @@ A normal `.lrc` file only says when each **line** starts. Lyridan then has to *g
 
 If an `.lrc` is all you have, **Tools → Align lyrics to song audio (experimental)** (or the button in the warning) can turn it into a syllable-synced `.ttml`:
 
-1. Choose the song audio - your chart's audio, the original song, or best of all an isolated **vocal stem** (UVR, Demucs…).
+1. Choose the song audio - your chart's audio or the original song - and, optionally but recommended, an isolated **vocal stem** of that same audio (UVR5, Demucs…). Lyridan listens to the stem while the timeline keeps playing the full song.
 2. Lyridan finds where the lyrics start in that audio (it recognises a chart's intro silence + empty bars automatically), then uses Meta's multilingual **MMS forced-alignment** speech model (run locally through ONNX Runtime) to find where every syllable is actually sung, using the `.lrc` line timestamps as anchors. Parenthesised backing-vocal parts of `.lrc` lines become background lines.
 3. The result is saved as a normal syllable-synced `.ttml` you can keep, fix and reuse.
 
@@ -81,7 +81,7 @@ Measured on *Baby Be Mine* (plain `.lrc` + chart audio, compared to the hand-mad
 | plain `.lrc`, estimated | 3 / 405 | 3% | 818 ms |
 | plain `.lrc` + audio alignment | 230 / 405 | 84% | 1 ms |
 
-Results **vary from song to song**: dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder, and mistakes cluster in such passages. Treat it as a strong starting point and check everything by ear. A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
+Results **vary from song to song**: dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder, and mistakes cluster in such passages. Treat it as a strong starting point and check everything by ear. Lines whose words the model can barely make out (vocals buried under instruments or effects) are listed as **hard to hear**; they lean on their `.lrc` timestamps instead of being squeezed into the wrong place, but check them first. A vocal stem helps most exactly there: on *Ghost Sequence* the full mix gives almost no usable signal for "Just breathe beside me in this fractured night", while a UVR5 stem places it correctly, and on *Baby Be Mine* a stem cut the syllables that were off by more than half a second from 45 to 29 (of 419). A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
 
 **Japanese kanji readings are checked against the audio too.** Some kanji have several readings and songs often use a less common one (e.g. 緋 is normally *hi*, but in *Ghost Sequence* it is sung *aka*). While aligning, Lyridan compares every alternative reading of such kanji with the singing: a reading that wins clearly replaces the dictionary one, and close calls are only listed in the result for you to check by ear (nothing is changed for them). Turn it off with the checkbox in the alignment dialog or `--no-verify-readings`. Without audio, readings stay dictionary-based: write `{緋|あか}` in the lyrics to force a reading.
 

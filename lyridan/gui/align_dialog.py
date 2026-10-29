@@ -140,10 +140,20 @@ class AlignSetupDialog(QDialog):
         self.path = QLineEdit()
         self.path.setPlaceholderText("Song audio or vocal stem (.wav .ogg .flac .mp3)")
         b = QPushButton("Browse…")
-        b.clicked.connect(lambda: self._browse(default_dir))
+        b.clicked.connect(lambda: self._browse(default_dir, self.path))
         row.addWidget(self.path, 1)
         row.addWidget(b)
         form.addRow("Audio", row)
+        row2 = QHBoxLayout()
+        self.stem = QLineEdit()
+        self.stem.setPlaceholderText("Optional: isolated vocals of the same audio (UVR5, Demucs…) - recommended")
+        self.stem.setToolTip("Alignment listens to this file while the timeline keeps playing the full song. "
+                             "It must be made from the same audio file so the timing matches.")
+        b2 = QPushButton("Browse…")
+        b2.clicked.connect(lambda: self._browse(default_dir, self.stem))
+        row2.addWidget(self.stem, 1)
+        row2.addWidget(b2)
+        form.addRow("Vocal stem", row2)
         self.auto = QCheckBox("Detect where the lyrics start automatically (recommended)")
         self.auto.setChecked(True)
         form.addRow(self.auto)
@@ -168,14 +178,17 @@ class AlignSetupDialog(QDialog):
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
 
-    def _browse(self, d):
+    def _browse(self, d, target):
         p, _ = QFileDialog.getOpenFileName(self, "Song audio", d, AUDIO_FILTER)
         if p:
-            self.path.setText(p)
+            target.setText(p)
 
     def _ok(self):
         if not os.path.isfile(self.path.text()):
             QMessageBox.warning(self, "Lyridan", "Please choose an audio file.")
+            return
+        if self.stem.text().strip() and not os.path.isfile(self.stem.text().strip()):
+            QMessageBox.warning(self, "Lyridan", "The vocal stem file does not exist.")
             return
         self.accept()
 
@@ -237,10 +250,11 @@ def run_alignment(window) -> None:
         return
     store = ModelStore()
     audio_path = setup.path.text()
+    listen_path = setup.stem.text().strip() or audio_path     # the vocal stem is easier to hear
     offset = None if setup.auto.isChecked() else setup.offset.value()
 
     def job(progress):
-        return align_lyrics(src, audio_path, window.settings, store.model_path, store.meta(), progress,
+        return align_lyrics(src, listen_path, window.settings, store.model_path, store.meta(), progress,
                             offset=offset, offset_prior=prior or None)
 
     res = _run_with_progress(window, "Aligning lyrics to the audio…", job)
@@ -256,6 +270,9 @@ def run_alignment(window) -> None:
         msg += "\n\n⚠ " + report.offset_note.capitalize() + "."
     if detail:
         msg += "\n\nLines that kept estimated timing:\n" + detail
+    hard = [l for l in report.lines if l.hard_to_hear and l.aligned]
+    if hard:
+        msg += "\n\nHard to hear (check these first):\n" + "\n".join(f"• {l.text[:60]}" for l in hard[:12])
     msg += ("\n\nThis is experimental: listen through the result and fix what is off. "
             "Save it as a .ttml to reuse it?")
     QMessageBox.information(window, "Alignment finished", msg)

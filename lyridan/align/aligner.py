@@ -19,6 +19,9 @@ PRE_ROLL_S = 0.6     # search this much before the LRC timestamp
 ANCHOR_WEIGHT = 0.5  # log-prob penalty per second the line starts away from its timestamp
 SKIP_FLOOR = float(np.log(0.2))  # cost per skipped frame before a line: like silence, but capped
 POST_ROLL_S = 0.25   # ...and after the next line's timestamp
+WEAK_REL = 0.25     # lines whose text evidence is below this share of the song's median are "hard to hear"
+WEAK_PRE_ROLL_S = 0.15   # ...they trust their LRC timestamp more:
+WEAK_ANCHOR = 4.0        # stronger pull towards the timestamp
 MAX_SHIFT_S = 4.0    # a line found further than this from its timestamp keeps the estimate
 
 
@@ -30,6 +33,7 @@ class LineResult:
     confidence: float
     shift: float = 0.0      # aligned first syllable - LRC timestamp (s)
     reason: str = ""
+    hard_to_hear: bool = False   # the model could barely make out the words (vocals buried in the mix)
 
 
 @dataclass
@@ -59,6 +63,11 @@ class AlignmentReport:
              f"which looks like {kind}.")
         if bad:
             s += f" {len(bad)} line(s) kept estimated timing - check them by ear."
+        hard = [l for l in self.lines if l.hard_to_hear]
+        if hard:
+            s += (f" {len(hard)} line(s) were hard to hear in this audio, so they lean on the .lrc timestamps - "
+                  "check them by ear. If you aligned to the full mix, an isolated vocal stem (UVR5, Demucs…) "
+                  "usually helps with such lines.")
         changed = [r for r in self.readings if r.applied]
         suggested = [r for r in self.readings if not r.applied]
         if changed:
@@ -166,13 +175,14 @@ def to_model_text(s: str) -> str:
 
 
 def ctc_align(logp: np.ndarray, tokens: Sequence[int], blank: int = 0,
-              start_cost: Optional[np.ndarray] = None):
+              start_cost: Optional[np.ndarray] = None, token_probs: Optional[List[float]] = None):
     """CTC Viterbi forced alignment with free (unaligned) audio before and after.
 
     ``start_cost[t]`` (<= 0) is added when the sung text starts at frame t; it keeps
     the line near its LRC timestamp unless the audio clearly says otherwise.
     Returns (list of (first_frame, last_frame) per token, mean token probability)
-    or None if the text cannot fit.
+    or None if the text cannot fit. ``token_probs`` (a list) receives each token's
+    best frame probability - how clearly the model heard it.
     """
     T = logp.shape[0]
     L = len(tokens)
@@ -234,6 +244,8 @@ def ctc_align(logp: np.ndarray, tokens: Sequence[int], blank: int = 0,
         t -= 1
     if any(a < 0 for a, _ in spans):
         return None
+    if token_probs is not None:
+        token_probs[:] = probs
     return [(a, b) for a, b in spans], float(np.mean(probs))
 
 
@@ -330,6 +342,8 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
     out_lines: List[SourceLine] = []
     lines = [l for l in processed.lines if not l.background]
 
+    # pass 1: line windows, letters, and how clearly each line's words can be heard
+    plan = []
     for n, ln in enumerate(lines):
         sl = src_lines[ln.index]
         t0 = (sl.start if sl.start is not None else ln.start) + offset
@@ -340,11 +354,6 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                 nxt = st + offset
                 break
         t1 = nxt if nxt is not None else min(song_len, t0 + 4.0 + 0.7 * sum(1 for _ in ln.syllables()))
-        ws = max(0.0, t0 - PRE_ROLL_S)
-        we = min(song_len, t1 + POST_ROLL_S)
-        f0, f1 = int(ws / spf), max(int(ws / spf) + 1, int(we / spf))
-        window = em[f0:f1]
-
         sylls = list(ln.syllables())
         tokens: List[int] = []
         owner: List[int] = []
@@ -353,8 +362,22 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                 if ch in aligner.index:
                     tokens.append(aligner.index[ch])
                     owner.append(si)
+        a, b = int(max(0.0, t0 - PRE_ROLL_S) / spf), int(min(song_len, t1 + POST_ROLL_S) / spf)
+        ev = text_evidence(em[a:max(a + 1, b)], tokens, aligner.blank) if len(tokens) >= 2 else None
+        plan.append((ln, sl, t0, nxt, t1, sylls, tokens, owner, ev))
+    evs = [p[-1] for p in plan if p[-1] is not None]
+    weak_below = WEAK_REL * float(np.median(evs)) if evs else -1e9
+
+    prev_end = 0.0   # audio time where the previous aligned line's singing ends
+    for n, (ln, sl, t0, nxt, t1, sylls, tokens, owner, ev) in enumerate(plan):
+        weak = ev is not None and ev < weak_below
+        # never search inside the previous line's singing (its tail can look like this line's start)
+        ws = max(0.0, t0 - (WEAK_PRE_ROLL_S if weak else PRE_ROLL_S), min(prev_end, t0))
+        we = min(song_len, t1 + POST_ROLL_S)
+        f0, f1 = int(ws / spf), max(int(ws / spf) + 1, int(we / spf))
+        window = em[f0:f1]
         frame_t = (f0 + np.arange(len(window))) * spf
-        cost = -ANCHOR_WEIGHT * np.abs(frame_t - t0)
+        cost = -ANCHOR_WEIGHT * (WEAK_ANCHOR if weak else 1.0) * np.abs(frame_t - t0)
         res = ctc_align(window, tokens, aligner.blank, cost) if tokens else None
         ok = False
         conf = 0.0
@@ -378,6 +401,7 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                     starts[si] = ta if starts[si] is None else min(starts[si], ta)
                     ends[si] = tb if ends[si] is None else max(ends[si], tb)
                 _fill_missing(starts, ends)
+                prev_end = last
                 durs = [max(0.05, (starts[i + 1] - starts[i])) for i in range(len(sylls) - 1)]
                 typical = float(np.median(durs)) if durs else 0.3
                 limit = (nxt - 0.05) if nxt is not None else song_len
@@ -398,7 +422,8 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                 sy.start += offset - report.timeline_shift
                 sy.end += offset - report.timeline_shift
         report.lines.append(LineResult(ln.index, ln.source_text, ok, conf,
-                                       (sylls[0].start + report.timeline_shift - t0) if ok else 0.0, reason))
+                                       (sylls[0].start + report.timeline_shift - t0) if ok else 0.0, reason,
+                                       hard_to_hear=weak))
         out_lines.append(_to_source_line(ln, sl))
         if progress and progress("Aligning lines…", (n + 1) / max(1, len(lines))) is False:
             raise InterruptedError("Cancelled")
@@ -418,6 +443,18 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                            title=source.title, artist=source.artist, timing="syllable",
                            has_romaji=any(l.romaji for l in out_lines), path=source.path)
     return aligned, report
+
+
+def text_evidence(logp: np.ndarray, tokens: Sequence[int], blank: int = 0, tries: int = 4) -> float:
+    """How much better the lyric explains this audio than the same letters in a random
+    order, per letter. Near 0 means the model cannot really hear the words here (vocals
+    buried in the mix), so the alignment would only be a guess."""
+    if len(tokens) < 2:
+        return 1.0
+    rng = np.random.default_rng(len(tokens))
+    real = ctc_score(logp, tokens, blank)
+    other = [ctc_score(logp, list(rng.permutation(tokens)), blank) for _ in range(tries)]
+    return (real - float(np.mean(other))) / len(tokens)
 
 
 def _fill_missing(starts: List[Optional[float]], ends: List[Optional[float]]):

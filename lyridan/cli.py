@@ -158,6 +158,8 @@ def main(argv=None):
         for l in rep.lines:
             if not l.aligned:
                 print(f"  kept estimate: {l.text[:60]} ({l.reason})", file=sys.stderr)
+            elif l.hard_to_hear:
+                print(f"  hard to hear, check by ear: {l.text[:60]}", file=sys.stderr)
         print(f"wrote {out}")
         return 0
     if a.cmd == "text":

@@ -380,6 +380,15 @@ def test_reading_verification_helpers():
     for f, k in enumerate([1, 1, 0, 2, 2, 0]):
         logp[f, k] = np.log(0.98)
     assert ctc_score(logp, [1, 2]) > ctc_score(logp, [2, 1])
+    # the real lyric explains the frames better than the same letters shuffled
+    from lyridan.align.aligner import text_evidence
+    seq = [1, 2, 3, 4, 5, 6]
+    lp = np.log(np.full((30, 8), 0.02))
+    for f in range(30):
+        lp[f, seq[f // 5] if f % 5 < 2 else 0] = np.log(0.9)
+    assert text_evidence(lp, seq) > 0.5
+    flat = np.log(np.full((30, 8), 1 / 8))
+    assert abs(text_evidence(flat, seq)) < 0.1
     rep = AlignmentReport()
     rep.readings = [ReadingChange(0, "緋と黒", "緋", "ひ", "あか", 5.3),
                     ReadingChange(1, "瞬き", "瞬き", "まばたき", "またたき", 3.6, applied=False)]
