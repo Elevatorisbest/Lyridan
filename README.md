@@ -9,8 +9,6 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 > Lyridan is a charting **assistant**, not a replacement for hand-made vocals. Always check the result
 > by ear before publishing.
 
-Version 2.0 is a full rewrite of the app.
-
 **Contents:**
 [Quick start](#quick-start) ·
 [Features](#features) ·
@@ -125,7 +123,7 @@ Click the timeline first. A coloured frame and a **Keys active** label show it i
 | F | fit the whole song |
 
 ### Audio
-- **Pick the audio** your chart uses with **🎵 Audio…** or drop it on the window. Lyridan doesn't guess it, because folder layouts differ too much between charters.
+- **Pick the audio** your chart uses with **🎵 Audio…** or drop it on the window.
 - **A new chart gets fresh audio:** loading a *different* chart XML unloads the previous chart's audio, so you never preview against the wrong song.
 - **Chart audio or the original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
 - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
@@ -147,7 +145,7 @@ chart time = lyric time
            + manual offset (ms)
 ```
 
-The total is shown at the bottom of the window. As an example, we checked this on *Baby Be Mine* against a hand-made vocal track from our own Rocksmith chart of the song. With the defaults it got an offset of +14.024 s, and compared with the hand-made vocals:
+The total is shown at the bottom of the window. As an example, we checked this on *Baby Be Mine* against a hand-made vocal track from Elevatorisbest's (author of this repo) Rocksmith chart of the song. With the defaults it got an offset of +14.024 s, and compared with the hand-made vocals:
 
 - 405 of 416 syllables are identical.
 - The median timing difference is 0.000 s.
@@ -251,7 +249,7 @@ Open them with the **⚙ Options** button at the top right (or Edit → Options)
 | Digital Studio | dark, inspired by a DAW edit window |
 | Digital Studio Light | light, inspired by a classic DAW edit window |
 | Studio Console | dark, inspired by an analogue mixing console strip |
-| Studio Console Light | light, inspired by a lighter analogue console strip |
+| Studio Console Light | light, inspired by a different analogue console strip |
 
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>
