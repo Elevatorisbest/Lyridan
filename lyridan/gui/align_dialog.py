@@ -10,10 +10,9 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QDoubleSpin
 
 AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.aif *.aiff *.opus *.m4a);;All files (*)"
 
-LRC_WARNING = ("<b>Line-synced .lrc lyrics are not recommended.</b> They only say when each line starts, so "
-               "Lyridan has to <i>guess</i> the timing of every syllable - expect poorly timed vocals. "
-               "Use a syllable-synced <b>.ttml</b> (e.g. from Apple Music) whenever you can, or try the "
-               "experimental audio alignment.")
+LRC_WARNING = ("<b>Line-synced .lrc:</b> only line starts are known. <b>Align it to the song audio</b> to time "
+               "every syllable. If you can get a syllable-synced <b>.ttml</b> (e.g. Apple Music) for this song, "
+               "it is still the most accurate source.")
 
 MODEL_CONSENT = """
 <h3>Download the alignment model?</h3>
@@ -123,7 +122,7 @@ class AlignSetupDialog(QDialog):
 
     def __init__(self, parent, default_dir: str, prior: float):
         super().__init__(parent)
-        self.setWindowTitle("Align lyrics to song audio (experimental)")
+        self.setWindowTitle("Align lyrics to song audio")
         self.setMinimumWidth(600)
         lay = QVBoxLayout(self)
         info = QLabel(
@@ -273,7 +272,7 @@ def run_alignment(window) -> None:
     hard = [l for l in report.lines if l.hard_to_hear and l.aligned]
     if hard:
         msg += "\n\nHard to hear (check these first):\n" + "\n".join(f"• {l.text[:60]}" for l in hard[:12])
-    msg += ("\n\nThis is experimental: listen through the result and fix what is off. "
+    msg += ("\n\nListen through the result and fix anything that is off. "
             "Save it as a .ttml to reuse it?")
     QMessageBox.information(window, "Alignment finished", msg)
     base = os.path.splitext(window.source_path or "lyrics")[0]

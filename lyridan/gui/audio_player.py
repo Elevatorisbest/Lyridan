@@ -87,6 +87,15 @@ class AudioPlayer:
         self._click_lo = _click(sr, 1000)
         self._close_stream()
 
+    def unload(self):
+        self.stop()
+        self._close_stream()
+        with self._lock:
+            self.data, self.path = None, ""
+            self._pos = 0.0
+            self._ref = (0.0, 0.0)
+        self.peaks = np.zeros((0, 2), dtype=np.float32)
+
     @property
     def loaded(self) -> bool:
         return self.data is not None

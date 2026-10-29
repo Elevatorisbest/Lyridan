@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import bisect
-import glob
-import json
 import os
 from typing import List, Optional
 
@@ -21,57 +19,9 @@ AUDIO_EXT = (".wav", ".ogg", ".flac", ".mp3", ".opus", ".m4a", ".aif", ".aiff")
 AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.opus *.m4a *.aif *.aiff);;All files (*)"
 
 
-def find_chart_audio(folders: List[str], title: str = "") -> Optional[str]:
-    """Best guess for the chart's audio: DLC Builder project audio, then audio files nearby."""
-    seen = set()
-    cands = []
-    for folder in folders:
-        if not folder or not os.path.isdir(folder) or folder in seen:
-            continue
-        seen.add(folder)
-        # DLC Builder project (.rs2dlc is JSON): look for audio paths in it
-        for proj in glob.glob(os.path.join(folder, "*.rs2dlc")):
-            try:
-                data = json.load(open(proj, encoding="utf-8-sig"))
-            except Exception:  # noqa: BLE001
-                continue
-            for path in _json_paths(data):
-                full = path if os.path.isabs(path) else os.path.join(os.path.dirname(proj), path)
-                if full.lower().endswith(AUDIO_EXT) and os.path.isfile(full) and "preview" not in \
-                        os.path.basename(full).lower():
-                    return full
-        for f in os.listdir(folder):
-            full = os.path.join(folder, f)
-            low = f.lower()
-            if low.endswith(AUDIO_EXT) and os.path.isfile(full) and "preview" not in low:
-                cands.append(full)
-    if not cands:
-        return None
-    words = [w for w in title.lower().split() if len(w) > 2]
-
-    def rank(path):
-        low = os.path.basename(path).lower()
-        ext_rank = {".wav": 3, ".ogg": 2, ".flac": 2}.get(os.path.splitext(low)[1], 1)
-        title_hit = sum(1 for w in words if w in low)
-        return (title_hit, ext_rank, os.path.getsize(path))
-
-    return max(cands, key=rank)
-
-
 def _mmss(t: float) -> str:
     m, s = divmod(int(max(0.0, t)), 60)
     return f"{m}:{s:02d}"
-
-
-def _json_paths(obj):
-    if isinstance(obj, dict):
-        for v in obj.values():
-            yield from _json_paths(v)
-    elif isinstance(obj, list):
-        for v in obj:
-            yield from _json_paths(v)
-    elif isinstance(obj, str) and obj.lower().endswith(AUDIO_EXT):
-        yield obj
 
 
 class TimelinePanel(QWidget):
@@ -93,11 +43,12 @@ class TimelinePanel(QWidget):
         bar = QHBoxLayout()
         self.btn_audio = QToolButton()
         self.btn_audio.setText("🎵 Audio…")
-        self.btn_audio.setToolTip("Load the chart's song audio (drop an audio file on the window works too)")
+        self.btn_audio.setToolTip("Pick the audio file your chart uses (the WAV/OGG from your EOF / DLC Builder "
+                                  "project). Dropping an audio file on the window works too.")
         self.btn_audio.clicked.connect(self.choose_audio)
-        self.audio_label = QLabel("No audio")
+        self.audio_label = QLabel()
         self.audio_label.setMinimumWidth(120)
-        self.audio_label.setStyleSheet("color: gray;")
+        self._no_audio_label()
         self.btn_start = QToolButton()
         self.btn_start.setText("⏮")
         self.btn_start.setToolTip("Back to the first lyric")
@@ -187,7 +138,7 @@ class TimelinePanel(QWidget):
         self.btn_keys.setToolTip(SHORTCUTS_HTML)
         self.btn_keys.clicked.connect(lambda: QMessageBox.information(self, "Timeline controls", SHORTCUTS_HTML))
         self.focus_label = QLabel()
-        self.focus_label.setMinimumWidth(140)
+        self.focus_label.setMinimumWidth(190)
         nav.addWidget(self.section_box)
         nav.addWidget(self.overview, 1)
         for wdg in (btn_fit, zoom_out, zoom_in, self.btn_keys, self.focus_label):
@@ -242,6 +193,7 @@ class TimelinePanel(QWidget):
         from PySide6.QtGui import QColor
         self.view.canvas.accent = QColor(color)
         self.view.canvas.update()
+        self._show_focus(self.view.canvas.hasFocus())
 
     def choose_audio(self):
         start = os.path.dirname(self.player.path) if self.player.path else ""
@@ -261,9 +213,24 @@ class TimelinePanel(QWidget):
         self.audio_label.setText(os.path.basename(path))
         self.audio_label.setToolTip(path)
         self.audio_label.setStyleSheet("")
+        self.btn_audio.setText("🎵 Audio…")
         self._update_shift()
         self.audioChanged.emit(path)
         return True
+
+    def _no_audio_label(self):
+        self.audio_label.setText("← pick your chart's audio")
+        self.audio_label.setToolTip("Lyridan does not guess the audio file - choose the one your chart uses")
+        self.audio_label.setStyleSheet("color: #d6a10a; font-weight: bold;")
+
+    def unload_audio(self):
+        if self._timer.isActive():
+            self._timer.stop()
+        self.player.unload()
+        self.btn_play.setText("▶ Play")
+        self._no_audio_label()
+        self._update_shift()
+        self._tick()
 
     def audio_kind(self) -> str:
         """'chart' = audio already has intro silence + empty bars; 'song' = original song."""
@@ -318,8 +285,8 @@ class TimelinePanel(QWidget):
             self._timer.start()
 
     def _try_play_without_audio(self) -> bool:
-        QMessageBox.information(self, "Lyridan", "Load the song audio first (🎵 Audio… or drop it on the window). "
-                                                 "Lyridan also finds it next to your chart XML automatically.")
+        QMessageBox.information(self, "Lyridan", "Pick your chart's audio first (🎵 Audio… or drop the file on "
+                                                 "the window).")
         return False
 
     def seek_chart(self, t: float):
@@ -375,11 +342,14 @@ class TimelinePanel(QWidget):
 
     def _show_focus(self, on: bool):
         if on:
-            self.focus_label.setText("⌨ Keys on · Esc leaves")
-            self.focus_label.setStyleSheet("color: palette(highlight); font-weight: bold;")
+            acc = self.view.canvas.accent
+            text = "#000000" if acc.lightness() > 140 else "#ffffff"
+            self.focus_label.setText("⌨  Keys active  ·  Esc to leave")
+            self.focus_label.setStyleSheet(f"background: {acc.name()}; color: {text}; font-weight: bold; "
+                                           "border-radius: 4px; padding: 3px 8px;")
         else:
-            self.focus_label.setText("Click timeline for keys")
-            self.focus_label.setStyleSheet("color: gray;")
+            self.focus_label.setText("Click the timeline to use keys")
+            self.focus_label.setStyleSheet("padding: 3px 8px;")
 
     def set_navigation(self, arrow_step: str, accelerate: bool):
         self.view.canvas.arrow_step = arrow_step

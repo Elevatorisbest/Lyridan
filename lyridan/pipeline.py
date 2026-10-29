@@ -283,7 +283,7 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
                 lines[i] = apply_override(ln, txt)
     lines.sort(key=lambda l: l.start)
     if source.timing in ("line", "none"):
-        warnings.insert(0, "This file only has line timing - syllable times inside each line are estimated.")
+        warnings.insert(0, "This file only has line timing - syllable times inside each line are estimated until you align it to the song audio.")
     return Processed(lines=lines, language=doc_lang, warnings=_dedupe(warnings), source=source)
 
 

@@ -284,21 +284,6 @@ def test_line_phrasing_syllable_limit():
 
 
 # ----------------------------------------------------------------- timeline helpers
-def test_find_chart_audio_and_dlcbuilder_project(tmp_path):
-    pytest.importorskip("PySide6")
-    import json
-    from lyridan.gui.timeline_panel import find_chart_audio
-    (tmp_path / "song_preview.ogg").write_bytes(b"x")
-    (tmp_path / "other.mp3").write_bytes(b"x" * 10)
-    (tmp_path / "Baby Be Mine.wav").write_bytes(b"x" * 5)
-    assert find_chart_audio([str(tmp_path)], "Baby Be Mine").endswith("Baby Be Mine.wav")
-    sub = tmp_path / "audio"
-    sub.mkdir()
-    (sub / "main.wav").write_bytes(b"x")
-    (tmp_path / "proj.rs2dlc").write_text(json.dumps({"AudioFile": {"Path": "audio/main.wav", "Volume": -8}}))
-    assert find_chart_audio([str(tmp_path)]).endswith(os.path.join("audio", "main.wav"))
-
-
 def test_audio_player_silent_clock(tmp_path):
     import time
     import numpy as np

@@ -20,7 +20,7 @@ from ..parsers import load_lyrics
 from ..parsers.rsxml import Beatmap, VocalEntry, parse_beatmap, parse_vocals, write_vocals
 from ..settings import Settings, config_dir
 from .dialogs import DictDialog, DisclaimerDialog, about_text
-from .timeline_panel import AUDIO_EXT, TimelinePanel, find_chart_audio
+from .timeline_panel import AUDIO_EXT, TimelinePanel
 
 LYRIC_FILTER = "Lyrics (*.ttml *.lrc *.elrc *.json *.xml *.txt);;All files (*)"
 XML_FILTER = "Rocksmith XML (*.xml);;All files (*)"
@@ -149,7 +149,8 @@ class MainWindow(QMainWindow):
         fm = mb.addMenu("&File")
         for text, slot, sc in (("Open lyrics…", self.open_lyrics, QKeySequence.Open),
                                ("Open beatmap XML…", self.open_beatmap, "Ctrl+B"),
-                               ("Open reference vocals XML…", self.open_reference, None),
+                               ("Compare with existing vocals XML…", self.open_reference, None),
+                               ("Remove comparison vocals", lambda: self.clear_reference(), None),
                                (None, None, None),
                                ("Open project…", self.open_project, "Ctrl+Shift+O"),
                                ("Save project…", self.save_project, QKeySequence.Save),
@@ -183,7 +184,7 @@ class MainWindow(QMainWindow):
             a.setShortcut(sc)
             pm.addAction(a)
         tm = mb.addMenu("&Tools")
-        self.act_align = QAction("Align lyrics to song audio (experimental)…", self)
+        self.act_align = QAction("Align lyrics to song audio…", self)
         self.act_align.triggered.connect(self.align_to_audio)
         tm.addAction(self.act_align)
         a = QAction("Remove downloaded alignment model", self)
@@ -216,12 +217,18 @@ class MainWindow(QMainWindow):
         self.beat_card = FileCard("2. Beatmap", "Drop the Rocksmith XML of your chart (lead/rhythm/bass)")
         self.beat_card.browse.clicked.connect(self.open_beatmap)
         self.beat_card.clear.clicked.connect(self.clear_beatmap)
-        self.ref_card = FileCard("Reference (optional)", "Existing vocals XML to compare")
-        self.ref_card.browse.clicked.connect(self.open_reference)
-        self.ref_card.clear.clicked.connect(self.clear_reference)
         cards.addWidget(self.lyrics_card, 3)
         cards.addWidget(self.beat_card, 3)
-        cards.addWidget(self.ref_card, 2)
+        new_btn = QPushButton("New chart…")
+        new_btn.setToolTip("Clear the lyrics, beatmap, audio and edits to start on another song "
+                           "(asks first; your settings are kept)")
+        new_btn.clicked.connect(self.new_chart)
+        new_btn.setAutoDefault(False)
+        new_btn.setFocusPolicy(Qt.NoFocus)
+        side = QVBoxLayout()
+        side.addStretch(1)
+        side.addWidget(new_btn)
+        cards.addLayout(side)
         root.addLayout(cards)
 
         split = QSplitter(Qt.Horizontal)
@@ -302,14 +309,14 @@ class MainWindow(QMainWindow):
         lay.addWidget(tip)
         from .align_dialog import LRC_WARNING
         self.lrc_banner = QFrame()
-        self.lrc_banner.setStyleSheet("QFrame{background:#fff4d6; border:1px solid #f5a524; border-radius:6px;}"
-                                      "QLabel{color:#4a3500; border:none;}")
+        self.lrc_banner.setStyleSheet("QFrame{background:#e6f0fb; border:1px solid #8bb4e6; border-radius:6px;}"
+                                      "QLabel{color:#14304f; border:none;}")
         bl = QHBoxLayout(self.lrc_banner)
         bl.setContentsMargins(10, 6, 10, 6)
-        warn = QLabel("⚠ " + LRC_WARNING)
+        warn = QLabel("ℹ " + LRC_WARNING)
         warn.setWordWrap(True)
         bl.addWidget(warn, 1)
-        self.btn_align = QPushButton("Align to song audio (experimental)…")
+        self.btn_align = QPushButton("Align to song audio…")
         self.btn_align.clicked.connect(self.align_to_audio)
         bl.addWidget(self.btn_align)
         self.lrc_banner.setVisible(False)
@@ -705,7 +712,7 @@ class MainWindow(QMainWindow):
             self.load_beatmap(p)
 
     def open_reference(self):
-        p, _ = QFileDialog.getOpenFileName(self, "Open reference vocals XML", self._last_dir(), XML_FILTER)
+        p, _ = QFileDialog.getOpenFileName(self, "Existing vocals XML to compare with", self._last_dir(), XML_FILTER)
         if p:
             self.load_reference(p)
 
@@ -731,13 +738,12 @@ class MainWindow(QMainWindow):
         timing = {"syllable": "syllable-synced", "word": "word-synced", "line": "line-synced",
                   "none": "not synced"}.get(src.timing, src.timing)
         extra = ", includes romaji" if src.has_romaji else ""
-        if src.timing in ("line", "none"):
-            extra += "  ⚠ not recommended"
+        if src.timing == "line":
+            extra += " - align to audio for syllable timing"
         self.lyrics_card.set_file(path, f"{len(src.lines)} lines, {timing}{extra}")
         self.settings.last_session["lyrics"] = path
         self._update_lrc_banner()
         self.recalculate()
-        self._auto_audio()
 
     def _update_lrc_banner(self):
         self.lrc_banner.setVisible(bool(self.source) and self.source.timing in ("line", "none"))
@@ -774,6 +780,11 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Could not read beatmap", f"{os.path.basename(path)}\n\n{e}")
             return
+        if (self.beatmap_path and os.path.normcase(os.path.abspath(self.beatmap_path)) !=
+                os.path.normcase(os.path.abspath(path)) and self.timeline.player.loaded):
+            self.timeline.unload_audio()           # that audio belonged to the previous chart
+            self.settings.last_session.pop("audio", None)
+            self.statusBar().showMessage("New chart loaded - pick its audio with 🎵 Audio…", 10000)
         self.beatmap = bm
         self.beatmap_path = path
         bars = len(bm.measure_starts)
@@ -782,7 +793,6 @@ class MainWindow(QMainWindow):
                                       f"first beat {bm.beats[0]:.3f}s")
         self.settings.last_session["beatmap"] = path
         self.recalculate()
-        self._auto_audio()
 
     def load_reference(self, path: str):
         try:
@@ -792,8 +802,50 @@ class MainWindow(QMainWindow):
             return
         self.reference_path = path
         self.settings.last_session["reference"] = path
-        self.ref_card.set_file(path, f"{len(self.reference)} vocals")
+        self.statusBar().showMessage(f"Comparing with {os.path.basename(path)} ({len(self.reference)} vocals) - "
+                                     "shown in the timeline's reference rows. File → Remove comparison vocals "
+                                     "hides it.", 10000)
         self.recalculate()
+
+    def new_chart(self):
+        """Start over for another song. Asks first; Cancel is the default so Enter/Esc never clear."""
+        if not (self.source or self.beatmap or self.timeline.player.loaded or self.reference):
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Start a new chart?")
+        box.setText("<b>Clear everything for a new chart?</b>")
+        box.setInformativeText("This removes the loaded lyrics, beatmap, audio, comparison vocals, your syllable "
+                               "edits and the manual offset. Options and conversion settings are kept.\n\n"
+                               "Unsaved edits are lost - use Save project first if you want to keep them.")
+        save = box.addButton("Save project first…", QMessageBox.ActionRole)
+        clear = box.addButton("Clear and start new", QMessageBox.DestructiveRole)
+        cancel = box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(cancel)
+        box.setEscapeButton(cancel)
+        clear.setEnabled(False)                    # guards against a reflex click / Enter
+        timer = QTimer(box)                        # owned by the dialog: never fires after it closes
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: clear.setEnabled(True))
+        timer.start(1200)
+        box.exec()
+        if box.clickedButton() is save:
+            self.save_project()
+            return
+        if box.clickedButton() is not clear:
+            return
+        self.timeline.unload_audio()
+        self.clear_reference()
+        self.clear_beatmap()
+        self.clear_lyrics()
+        self.settings.manual_offset_ms = 0.0
+        self.settings.language = "auto"
+        self.settings.last_session = {}
+        self._load_settings_into_ui()
+        self.recalculate()
+        self.timeline.seek_chart(0.0)
+        self.timeline.view.horizontalScrollBar().setValue(0)
+        self.statusBar().showMessage("Ready for a new chart: drop the lyrics, the chart XML and its audio.", 10000)
 
     def clear_lyrics(self):
         self.settings.last_session.pop("lyrics", None)
@@ -815,7 +867,6 @@ class MainWindow(QMainWindow):
         self.settings.last_session.pop("reference", None)
         self.reference = []
         self.reference_path = None
-        self.ref_card.set_file(None)
         self.recalculate()
 
     # ------------------------------------------------------------------ processing
@@ -935,20 +986,6 @@ class MainWindow(QMainWindow):
             ms = self.beatmap.measure_starts
             sh += self.beatmap.first_n_measures_end(self.settings.empty_bars) - (ms[0] if ms else 0.0)
         return sh
-
-    def _auto_audio(self):
-        """Find and load the chart's audio next to the beatmap / lyrics if none is loaded."""
-        if self.timeline.player.loaded or not self.settings.auto_find_audio:
-            return
-        folders = []
-        for pth in (self.beatmap_path, self.source_path):
-            if pth:
-                d = os.path.dirname(pth)
-                folders += [d, os.path.dirname(d)]
-        title = self.beatmap.title if self.beatmap else ""
-        found = find_chart_audio(folders, title)
-        if found and self.timeline.load_audio(found, quiet=True):
-            self.statusBar().showMessage(f"Found the song audio automatically: {os.path.basename(found)}", 8000)
 
     def _on_item_changed(self, item: QTableWidgetItem):
         if self._table_updating or item.column() != 2:
@@ -1147,6 +1184,7 @@ class MainWindow(QMainWindow):
             return
         data = {"lyridan": VERSION, "lyrics": self.source_path, "beatmap": self.beatmap_path,
                 "reference": self.reference_path, "settings": self.settings.to_json(),
+                "audio": self.timeline.player.path if self.timeline.player.loaded else None,
                 "overrides": {str(k): v for k, v in self.overrides.items()}}
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
@@ -1181,6 +1219,11 @@ class MainWindow(QMainWindow):
             self.load_lyrics_file(p, keep_overrides=True)
         elif p:
             missing.append(p)
+        a = data.get("audio")
+        if a and os.path.exists(a):
+            self.timeline.load_audio(a, quiet=True)
+        elif a:
+            missing.append(a)
         if missing:
             QMessageBox.warning(self, "Missing files", "These files were not found:\n" + "\n".join(missing))
 

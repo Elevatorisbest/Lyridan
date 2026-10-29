@@ -68,7 +68,6 @@ class Settings:
     ui_font_pt: int = 0                    # 0 = system default
     preview_font_pt: int = 22              # in-game lyric preview
     restore_session: bool = True           # reopen the last lyrics / beatmap / audio
-    auto_find_audio: bool = True           # look for the chart audio next to the beatmap XML
     playback_volume: int = 80
     metronome: bool = False
     follow_playhead: bool = True

@@ -99,9 +99,9 @@ your own charting.</p>
 or have it checked by other charters before publishing.</li>
 <li>Syllable splits, romanization / latinization, line breaks and timing can contain mistakes.</li>
 <li>The quality of the lyrics and of the sync <b>depends on the source file</b> (for example a .ttml from
-Apple Music) and <b>varies from song to song</b>. <b>Line-synced .lrc files are not recommended</b>: their
-syllable timing is estimated (or, with the experimental audio alignment, detected by an AI model) and is far
-less reliable than a syllable-synced .ttml.</li>
+Apple Music) and <b>varies from song to song</b>. With line-synced .lrc files the syllable timing comes from
+the audio alignment (or is estimated without it), so check it a little more closely; a syllable-synced .ttml is
+the most accurate source when one is available.</li>
 <li>The sync assumes your chart's audio matches the source (intro silence, empty bars, offsets) - check the
 first and last lines in particular.</li>
 </ul>

@@ -15,7 +15,7 @@ Version 2.0 is a full rewrite of the app.
 | Native-script export | — | ✅ kana/kanji (JVocals) | ✅ Cyrillic |
 
 - **Inputs:** Apple Music syllable-synced TTML (raw TTML or the JSON API response), word- or line-synced TTML, plain LRC, and enhanced LRC (`<mm:ss.xx>` word tags).
-  **Syllable-synced `.ttml` is strongly recommended** - see [Why .lrc is not recommended](#why-lrc-is-not-recommended).
+  `.lrc` files work well once aligned to the song audio; a syllable-synced `.ttml` is still the most accurate source when you can get one - see [Using .lrc files](#using-lrc-files).
 - **Uses Apple's own syllable splits.** If the TTML splits a word (`para` + `dise`), those splits are kept and timed exactly.
 - **Beat sync:** load any arrangement XML from your chart (lead, rhythm or bass). Every syllable is snapped to its beat grid (1/4 to 1/64 notes, triplets included, time-signature aware).
 - **Charting guidelines** are toggles. Lyridan applies the offset for your audio's intro silence (10 s by default) and two empty bars (measured from your beatmap), and warns if a lyric would land inside them.
@@ -30,14 +30,14 @@ Version 2.0 is a full rewrite of the app.
   - the song's waveform
   - your chart's measures, sections and notes
   - the generated vocals in two rows: **Lyric lines** (each Rocksmith line as one block with its full text) and **Syllables** (one bar per syllable, joined within a word, with a mark at every line break)
-  - an optional reference vocals XML in the same two-row form, to compare against
+  - optionally, an existing vocals XML in the same two-row form to compare against (**File → Compare with existing vocals XML…**), e.g. when redoing a chart that already has vocals
 
   Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung, the next line waits below. It is built from the exact vocals that will be exported, so you check the final sync and line breaks before exporting.
   - **Getting around:** an overview strip shows the whole song (sections and lyric lines); click or drag it to look at any part. **Go to section…** jumps straight to a section, **Fit** shows the whole song. In the timeline: click to move the playhead (drag to scrub), click a section to jump to it, double-click a lyric line to play it, wheel to scroll (Shift = faster), Ctrl + wheel to zoom, right/middle-drag to pan.
   - **Keyboard** (after clicking the timeline; a coloured frame shows it is listening and **Esc** gives the keyboard back, so these keys never change settings elsewhere): ← → step the playhead (by 1/4 beat … a bar, set in Options; speeds up while held), Shift = 4× steps, Ctrl/Alt + ← → previous/next lyric line, PgUp/PgDn previous/next section, Home/End, ↑ ↓ zoom, Space play/pause, Enter play the current line, F fit. The ⌨ button lists them.
   - **No accidental changes:** the mouse wheel over a number box, drop-down or slider in the settings scrolls the panel instead of changing the value, unless you clicked into that field first.
   - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
-  - **Finding the audio:** Lyridan picks up the song audio by itself. It looks in a DLC Builder project (`.rs2dlc`) or for audio files next to your chart XML, and reuses the audio from the alignment tool. You can also drop an audio file on the window.
+  - **The audio:** pick the audio file your chart uses with **🎵 Audio…** or drop it on the window. Lyridan doesn't guess it (folder layouts differ too much between charters). When you load a *different* chart XML, the previous chart's audio is unloaded so you never preview against the wrong song. Saved projects remember the audio file.
   - **Chart audio or original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
 - **Options** (Edit → Options): themes (System, Light, Dark and the original black-and-yellow **Lyridan Dark** from v1.x), text sizes, playback defaults, reopening the last session, default export folder, export-disclaimer and acknowledgement reset, alignment-model management and the build information.
 - **Projects** (`.lyridan`) save the files, settings and your edits. **User dictionaries** hold your own English syllable splits and Japanese readings.
@@ -63,13 +63,13 @@ The total is shown at the bottom of the window. With the defaults, the bundled t
 
 If your chart's audio was prepared differently, turn off the toggles that don't apply and use the manual offset. The timeline shows the result against your chart notes.
 
-## Why .lrc is not recommended
+## Using .lrc files
 
-A normal `.lrc` file only says when each **line** starts. Lyridan then has to *guess* when every syllable inside the line is sung, so the timing of plain `.lrc` lyrics is **likely to be poor** - on the test song only 3% of syllables landed within a 1/16 note of the hand-made chart, compared to 93% from Apple's syllable-synced `.ttml`. Use a syllable-synced `.ttml` whenever you can; the app shows a warning whenever an `.lrc` is loaded.
+A normal `.lrc` file only says when each **line** starts, so on its own Lyridan can only estimate the syllable timing inside a line (on the test song only 3% of syllables landed within a 1/16 note of the hand-made chart). **Aligning it to the song audio fixes most of that** (84%, see below). A syllable-synced `.ttml` (e.g. from Apple Music) is still the most accurate source (93%), so use one when it exists for your song. When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to song audio…** button.
 
-### Experimental: align an .lrc to the song audio
+### Align an .lrc to the song audio
 
-If an `.lrc` is all you have, **Tools → Align lyrics to song audio (experimental)** (or the button in the warning) can turn it into a syllable-synced `.ttml`:
+**Tools → Align lyrics to song audio…** (or the button in the note) turns an `.lrc` into a syllable-synced `.ttml`:
 
 1. Choose the song audio - your chart's audio or the original song - and, optionally but recommended, an isolated **vocal stem** of that same audio (UVR5, Demucs…). Lyridan listens to the stem while the timeline keeps playing the full song.
 2. Lyridan finds where the lyrics start in that audio (it recognises a chart's intro silence + empty bars automatically), then uses Meta's multilingual **MMS forced-alignment** speech model (run locally through ONNX Runtime) to find where every syllable is actually sung, using the `.lrc` line timestamps as anchors. Parenthesised backing-vocal parts of `.lrc` lines become background lines.
@@ -136,15 +136,16 @@ xattr -cr /Applications/Lyridan.app
 ## Using it
 
 1. Drop a `.ttml` / `.lrc` file onto the window.
-2. Drop the arrangement XML of the chart you're working on (it has the synced beatmap).
+2. Drop the arrangement XML of the chart you're working on (it has the synced beatmap) and the chart's audio file (for playback and the timeline).
 3. Check the **Lyrics** tab (edit lines if needed), the **Timeline** and the **Notes** tab.
 4. Click **Export Rocksmith vocals XML…** and import it in EOF / Charter / DLC Builder.
+5. Moving on to another song? **New chart…** (top right) clears the lyrics, beatmap, audio and your edits in one go. It asks first, Cancel is the default and the clear button only unlocks after a moment, so a reflex click or Enter can't wipe your work. Options and conversion settings are kept.
 
 Command line (also works with the installed app):
 ```bash
 python -m lyridan convert song.ttml -b "2_Bass_RS2.xml" -o "1_Vocals_RS2.xml" [--native-output JVocals.xml]
 python -m lyridan text song.lrc          # print syllabized / romanized lyrics
-python -m lyridan align song.lrc song.ogg -b chart.xml --yes   # experimental: .lrc -> syllable .ttml
+python -m lyridan align song.lrc song.ogg -b chart.xml --yes   # .lrc -> syllable .ttml using the audio
 python -m lyridan convert --help         # all options
 ```
 

@@ -66,10 +66,6 @@ class OptionsDialog(QDialog):
 
     def _playback(self):
         w, f = self._form()
-        self.auto_audio = QCheckBox("Find the chart's audio automatically (DLC Builder project or audio files "
-                                    "next to the beatmap XML)")
-        self.auto_audio.setChecked(self.s.auto_find_audio)
-        f.addRow(self.auto_audio)
         self.vol = QSlider(Qt.Horizontal)
         self.vol.setRange(0, 100)
         self.vol.setValue(self.s.playback_volume)
@@ -138,7 +134,7 @@ class OptionsDialog(QDialog):
         self.model_status = QLabel(("Downloaded" + size) if st.is_installed() else "Not downloaded")
         f.addRow("Alignment model", self.model_status)
         lic = QLabel(f"{MODEL_INFO['name']} - {MODEL_INFO['license']}. Used only by Tools → Align lyrics to "
-                     "song audio (experimental). Downloaded on first use.")
+                     "song audio. Downloaded on first use.")
         lic.setWordWrap(True)
         lic.setStyleSheet("color: gray;")
         f.addRow(lic)
@@ -191,7 +187,6 @@ class OptionsDialog(QDialog):
         s.theme = self.theme.currentData()
         s.ui_font_pt = self.font_pt.value()
         s.preview_font_pt = self.preview_pt.value()
-        s.auto_find_audio = self.auto_audio.isChecked()
         s.playback_volume = self.vol.value()
         s.metronome = self.metro.isChecked()
         s.follow_playhead = self.follow.isChecked()
