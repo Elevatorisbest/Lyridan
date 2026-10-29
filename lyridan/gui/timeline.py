@@ -153,6 +153,8 @@ class TimelineCanvas(QWidget):
         self.peaks_bps = 100.0
         self.audio_shift = 0.0                        # chart time = audio time + shift
         self.accent = QColor("#46a758")
+        self.wave_color: Optional[QColor] = None      # theme colour for the waveform (None = text colour)
+        self.playhead_color = QColor("#ff4d4d")       # playhead + the syllable being sung (contrasts the accent)
         self.active_index = -1
         self.arrow_step = "beat"
         self.accelerate = True
@@ -371,8 +373,8 @@ class TimelineCanvas(QWidget):
             y0, rh = rows["wave"]
             mid = y0 + rh / 2
             amp = rh / 2 - 4
-            wc = QColor(fg)
-            wc.setAlpha(110)
+            wc = QColor(self.wave_color) if self.wave_color is not None else QColor(fg)
+            wc.setAlpha(170 if self.wave_color is not None else 110)
             a_t0 = max(0.0, t0 - self.audio_shift)
             a_t1 = max(0.0, t1 - self.audio_shift)
             i0 = int(a_t0 * self.peaks_bps)
@@ -412,7 +414,7 @@ class TimelineCanvas(QWidget):
         # playhead
         if self.playhead is not None and t0 <= self.playhead <= t1:
             X = self.x(self.playhead)
-            ph = QColor("#ff4d4d")
+            ph = QColor(self.playhead_color)
             p.setPen(QPen(ph, 2))
             p.drawLine(QPointF(X, 0), QPointF(X, h))
             p.setBrush(ph)
@@ -463,7 +465,7 @@ class TimelineCanvas(QWidget):
             nxt = entries[i + 1].time if i + 1 < len(entries) else e.time + e.length + 5
             room = (nxt - e.time) * self.pps - 4
             active = live and i == self.active_index
-            c = QColor("#ff4d4d") if active else QColor(color)
+            c = QColor(self.playhead_color) if active else QColor(color)
             c.setAlpha(255 if active else 200)
             path = QPainterPath()
             path.addRoundedRect(QRectF(X, bar_y, w, bar_h), 2.5, 2.5)
@@ -482,7 +484,7 @@ class TimelineCanvas(QWidget):
             if room > 10:
                 txt = fm.elidedText(txt, Qt.ElideRight, int(room))
                 if txt and txt != "…":
-                    p.setPen(QColor("#ff4d4d") if active else fg)
+                    p.setPen(QColor(self.playhead_color) if active else fg)
                     p.drawText(QPointF(X + 1, bar_y + bar_h + 13), txt)
 
     # ------------------------------------------------------------------ hit tests
@@ -909,7 +911,7 @@ class OverviewBar(QWidget):
         p.setPen(QPen(win, 1))
         p.drawRect(QRectF(self._x(a), 0.5, max(3.0, self._x(b) - self._x(a)), h - 1))
         if c.playhead is not None:
-            p.setPen(QPen(QColor("#ff4d4d"), 2))
+            p.setPen(QPen(QColor(c.playhead_color), 2))
             X = self._x(c.playhead)
             p.drawLine(QPointF(X, 0), QPointF(X, h))
         p.end()

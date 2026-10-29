@@ -59,7 +59,9 @@ class OptionsDialog(QDialog):
         self.preview_pt.setSuffix(" pt")
         self.preview_pt.setValue(self.s.preview_font_pt)
         f.addRow("In-game preview text size", self.preview_pt)
-        note = QLabel("Lyridan Dark is the black-and-yellow theme from Lyridan 1.x.")
+        note = QLabel("Lyridan Dark is the black-and-yellow theme from Lyridan 1.x. Every theme shows check boxes "
+                      "as a tick on the accent colour when on and an empty box when off.")
+        note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         f.addRow(note)
         return w

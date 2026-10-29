@@ -189,10 +189,19 @@ class TimelinePanel(QWidget):
         if not self.player.playing:
             self._show_time(self.chart_time())
 
-    def set_accent(self, color):
+    def set_accent(self, color, colors: Optional[dict] = None):
         from PySide6.QtGui import QColor
-        self.view.canvas.accent = QColor(color)
-        self.view.canvas.update()
+        colors = colors or {}
+        c = self.view.canvas
+        c.accent = QColor(color)
+        c.wave_color = QColor(colors["wave"]) if colors.get("wave") else None
+        c.playhead_color = QColor(colors.get("playhead", "#ff4d4d"))
+        c.update()
+        if colors.get("clock_bg"):
+            self.time_label.setStyleSheet(f"background: {colors['clock_bg']}; color: {colors['clock_fg']}; "
+                                          "border-radius: 4px; padding: 2px 8px;")
+        else:
+            self.time_label.setStyleSheet("padding: 2px 8px;")
         self._show_focus(self.view.canvas.hasFocus())
 
     def choose_audio(self):
