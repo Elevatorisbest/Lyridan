@@ -62,6 +62,18 @@ class Settings:
     # ---- notices ------------------------------------------------------------
     disclaimer_acknowledged: bool = False  # "don't show again" on the export disclaimer
 
+    # ---- application options (Options dialog) ------------------------------------
+    theme: str = "dark"                    # system | light | dark | lyridan_dark
+    ui_font_pt: int = 0                    # 0 = system default
+    preview_font_pt: int = 22              # in-game lyric preview
+    restore_session: bool = True           # reopen the last lyrics / beatmap / audio
+    auto_find_audio: bool = True           # look for the chart audio next to the beatmap XML
+    playback_volume: int = 80
+    metronome: bool = False
+    follow_playhead: bool = True
+    export_folder: str = ""                # "" = next to the beatmap / lyrics
+    last_session: Dict[str, str] = field(default_factory=dict)
+
     # ---- other exports ------------------------------------------------------
     text_syllable_sep: str = "-"
     text_word_sep: str = " "

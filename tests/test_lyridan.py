@@ -281,3 +281,48 @@ def test_line_phrasing_syllable_limit():
     # limit off -> one line
     assert len(_rs_lines_lrc("[00:10.00]Share my feelings in the heat of love's embrace\n[00:15.00]\n",
                          max_line_syllables=0, max_line_chars=0)) == 1
+
+
+# ----------------------------------------------------------------- timeline helpers
+def test_find_chart_audio_and_dlcbuilder_project(tmp_path):
+    pytest.importorskip("PySide6")
+    import json
+    from lyridan.gui.timeline_panel import find_chart_audio
+    (tmp_path / "song_preview.ogg").write_bytes(b"x")
+    (tmp_path / "other.mp3").write_bytes(b"x" * 10)
+    (tmp_path / "Baby Be Mine.wav").write_bytes(b"x" * 5)
+    assert find_chart_audio([str(tmp_path)], "Baby Be Mine").endswith("Baby Be Mine.wav")
+    sub = tmp_path / "audio"
+    sub.mkdir()
+    (sub / "main.wav").write_bytes(b"x")
+    (tmp_path / "proj.rs2dlc").write_text(json.dumps({"AudioFile": {"Path": "audio/main.wav", "Volume": -8}}))
+    assert find_chart_audio([str(tmp_path)]).endswith(os.path.join("audio", "main.wav"))
+
+
+def test_audio_player_silent_clock(tmp_path):
+    import time
+    import numpy as np
+    import soundfile as sf
+    from lyridan.gui.audio_player import AudioPlayer
+    p = tmp_path / "a.wav"
+    sf.write(str(p), np.zeros((44100 * 3, 2), dtype=np.float32), 44100)
+    pl = AudioPlayer()
+    pl.load(str(p))
+    assert abs(pl.duration - 3.0) < 1e-3 and len(pl.peaks) == 300
+    pl._ensure_stream = lambda: False          # force the silent fallback clock
+    pl.seek(1.0)
+    pl.play()
+    time.sleep(0.3)
+    pos = pl.position()
+    pl.pause()
+    assert 1.2 < pos < 1.6 and not pl.playing
+
+
+def test_export_entry_line_mapping():
+    s = Settings()
+    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    pr = process(src, s)
+    res = build_vocals(pr.lines, s, None)
+    assert len(res.entry_line) == len(res.entries)
+    first_line = [l for l in pr.lines if not l.background][0].index
+    assert res.entry_line[0] == first_line and res.entry_line == sorted(res.entry_line)

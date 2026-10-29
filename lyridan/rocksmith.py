@@ -352,6 +352,7 @@ class ExportResult:
     offset: OffsetInfo
     warnings: List[str]
     lines: List[RSLine]
+    entry_line: List[int] = field(default_factory=list)   # source line index of every entry
 
 
 def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatmap],
@@ -375,7 +376,9 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
     rs_lines = split_lines(main, settings, native_cjk=cjk)
 
     # flatten into events
+    word_line = {id(w): ln.index for ln in main for w in ln.words}
     events = []  # [start, end, text, joiner]
+    entry_line: List[int] = []
     for li, rl in enumerate(rs_lines):
         nwords = len(rl.words)
         for wi, (w, texts) in enumerate(zip(rl.words, rl.texts)):
@@ -392,6 +395,7 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
                 else:
                     joiner = "-"
                 events.append([s.start + off.total, s.end + off.total, t, joiner])
+                entry_line.append(word_line.get(id(w), -1))
     if not events:
         return ExportResult([], off, warnings + ["No lyrics to export."], rs_lines)
 
@@ -443,7 +447,7 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
         if long_lines:
             warnings.append(f"{len(long_lines)} line(s) still have more than {lim + 2} syllables - "
                             f"consider splitting them by hand.")
-    return ExportResult(entries, off, warnings, rs_lines)
+    return ExportResult(entries, off, warnings, rs_lines, entry_line)
 
 
 def _cap_first(t: str) -> str:

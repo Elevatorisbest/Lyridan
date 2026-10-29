@@ -17,6 +17,7 @@ datas += collect_data_files("unidic_lite")
 datas += collect_data_files("certifi")
 binaries = collect_dynamic_libs("fugashi")
 binaries += collect_dynamic_libs("onnxruntime")
+datas += collect_data_files("_sounddevice_data")      # PortAudio for the timeline playback (Windows/macOS)
 
 excludes = [
     "tkinter", "pydoc", "PIL", "torch", "torchaudio", "scipy", "matplotlib",
@@ -31,7 +32,7 @@ a = Analysis(
     pathex=[ROOT],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["fugashi", "unidic_lite", "lyridan._build", "onnxruntime", "soundfile", "soxr", "shlex", "csv", "collections", "site"],
+    hiddenimports=["fugashi", "unidic_lite", "lyridan._build", "onnxruntime", "soundfile", "soxr", "sounddevice", "_sounddevice_data", "shlex", "csv", "collections", "site"],
     excludes=excludes,
     noarchive=False,
 )

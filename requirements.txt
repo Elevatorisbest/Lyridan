@@ -8,3 +8,5 @@ onnxruntime>=1.19
 soundfile>=0.12
 soxr>=0.3
 certifi
+# timeline playback
+sounddevice>=0.4.6

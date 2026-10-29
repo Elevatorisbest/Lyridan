@@ -223,6 +223,8 @@ def run_alignment(window) -> None:
         prior += window.beatmap.first_n_measures_end(window.settings.empty_bars) - (ms[0] if ms else 0)
     folder = os.path.dirname(window.source_path or os.path.expanduser("~"))
     setup = AlignSetupDialog(window, folder, prior)
+    if window.timeline.player.loaded:
+        setup.path.setText(window.timeline.player.path)      # the timeline's audio is a good default
     if not setup.exec():
         return
     if not ensure_model(window):
@@ -239,6 +241,8 @@ def run_alignment(window) -> None:
     if not res:
         return
     aligned, report = res
+    if not window.timeline.player.loaded or window.timeline.player.path != audio_path:
+        window.timeline.load_audio(audio_path, quiet=True)   # reuse the song audio for the preview
     bad = [l for l in report.lines if not l.aligned]
     detail = "\n".join(f"• {l.text[:60]} - {l.reason}" for l in bad[:12])
     msg = report.summary()

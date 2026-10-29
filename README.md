@@ -26,7 +26,18 @@ Version 2.0 is a full rewrite of the app.
   - tiny fragments are avoided, e.g. "Ya / zhdu otveta" becomes "Ya zhdu otveta"
   - a line one or two syllables over the limit is kept whole when splitting it would read worse
 - **Editing:** fix any line in the editor (`Eve-ry mo-ment / Takes me to pa-ra-dise`). Lyridan keeps the timing and `/` forces a line break.
-- **Timeline:** shows your chart's measures, sections and notes next to the generated vocals, plus an optional reference vocals XML to compare against.
+- **Timeline with playback and an in-game lyrics preview:** below the lyrics you see:
+  - the song's waveform
+  - your chart's measures, sections and notes
+  - the generated vocals, with a mark at every Rocksmith line break
+  - an optional reference vocals XML to compare against
+
+  Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung, the next line waits below. It is built from the exact vocals that will be exported, so you check the final sync and line breaks before exporting.
+  - **Navigation:** click anywhere to seek; click a lyric to jump to its line in the table. Double-clicking a line's time in the table moves the playhead there.
+  - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead, zoom with Ctrl + mouse wheel.
+  - **Finding the audio:** Lyridan picks up the song audio by itself. It looks in a DLC Builder project (`.rs2dlc`) or for audio files next to your chart XML, and reuses the audio from the alignment tool. You can also drop an audio file on the window.
+  - **Chart audio or original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
+- **Options** (Edit → Options): themes (System, Light, Dark and the original black-and-yellow **Lyridan Dark** from v1.x), text sizes, playback defaults, reopening the last session, default export folder, export-disclaimer and acknowledgement reset, alignment-model management and the build information.
 - **Projects** (`.lyridan`) save the files, settings and your edits. **User dictionaries** hold your own English syllable splits and Japanese readings.
 - **Other exports:** syllabized text (for UltraStar Creator and similar) and romanized LRC or enhanced LRC.
 

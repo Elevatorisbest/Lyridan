@@ -20,7 +20,7 @@ from ..parsers import load_lyrics
 from ..parsers.rsxml import Beatmap, VocalEntry, parse_beatmap, parse_vocals, write_vocals
 from ..settings import Settings, config_dir
 from .dialogs import DictDialog, DisclaimerDialog, about_text
-from .timeline import TimelineView
+from .timeline_panel import AUDIO_EXT, TimelinePanel, find_chart_audio
 
 LYRIC_FILTER = "Lyrics (*.ttml *.lrc *.elrc *.json *.xml *.txt);;All files (*)"
 XML_FILTER = "Rocksmith XML (*.xml);;All files (*)"
@@ -134,6 +134,8 @@ class MainWindow(QMainWindow):
             tag.setStyleSheet("background:#f5a524; color:black; font-weight:bold; border-radius:3px;")
             tag.setToolTip(buildinfo.as_text())
             self.statusBar().addPermanentWidget(tag)
+        self.apply_options()
+        QTimer.singleShot(0, self.restore_session)
         self.statusBar().showMessage("Loading language dictionaries…")
         w = _Warmup()
         w.signals.done.connect(lambda: self.statusBar().showMessage("Ready - drop a .ttml/.lrc file and a Rocksmith XML", 8000))
@@ -163,6 +165,21 @@ class MainWindow(QMainWindow):
             if sc:
                 a.setShortcut(sc)
             fm.addAction(a)
+        em = mb.addMenu("&Edit")
+        a = QAction("Options…", self)
+        a.setShortcut(QKeySequence.Preferences if not QKeySequence(QKeySequence.Preferences).isEmpty()
+                      else QKeySequence("Ctrl+,"))
+        a.setMenuRole(QAction.PreferencesRole)
+        a.triggered.connect(self.open_options)
+        em.addAction(a)
+        pm = mb.addMenu("&Playback")
+        for text, slot, sc in (("Play / pause", lambda: self.timeline.toggle_play(), "Ctrl+P"),
+                               ("Go to first lyric", lambda: self.timeline.go_first_lyric(), "Ctrl+Home"),
+                               ("Load song audio…", lambda: self.timeline.choose_audio(), "Ctrl+Shift+A")):
+            a = QAction(text, self)
+            a.triggered.connect(slot)
+            a.setShortcut(sc)
+            pm.addAction(a)
         tm = mb.addMenu("&Tools")
         self.act_align = QAction("Align lyrics to song audio (experimental)…", self)
         self.act_align.triggered.connect(self.align_to_audio)
@@ -208,29 +225,6 @@ class MainWindow(QMainWindow):
         split = QSplitter(Qt.Horizontal)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_editor(), "Lyrics")
-        self.timeline = TimelineView()
-        tl_wrap = QWidget()
-        tl_lay = QVBoxLayout(tl_wrap)
-        tl_bar = QHBoxLayout()
-        tl_bar.addWidget(QLabel("Ctrl + mouse wheel to zoom, wheel to scroll."))
-        tl_bar.addStretch(1)
-        for txt, f in (("−", 1 / 1.4), ("+", 1.4)):
-            b = QToolButton()
-            b.setText(txt)
-            b.clicked.connect(lambda _=False, f=f: self.timeline.canvas.set_zoom(self.timeline.canvas.pps * f))
-            tl_bar.addWidget(b)
-        jump = QPushButton("Go to first lyric")
-        jump.clicked.connect(lambda: self.result and self.result.entries and
-                             self.timeline.scroll_to_time(self.result.entries[0].time - 2))
-        tl_bar.addWidget(jump)
-        tl_lay.addLayout(tl_bar)
-        tl_lay.addWidget(self.timeline, 1)
-        legend = QLabel("<span style='color:#e5484d'>■</span> intro silence &nbsp; "
-                        "<span style='color:#f5a524'>■</span> empty bars &nbsp; "
-                        "<span style='color:#46a758'>■</span> Lyridan vocals &nbsp; "
-                        "<span style='color:#8e4ec6'>■</span> reference vocals")
-        tl_lay.addWidget(legend)
-        self.tabs.addTab(tl_wrap, "Timeline")
         self.rs_preview = QPlainTextEdit()
         self.rs_preview.setReadOnly(True)
         mono = QFont("Consolas" if os.name == "nt" else "Menlo")
@@ -251,7 +245,17 @@ class MainWindow(QMainWindow):
         self.notes = QListWidget()
         self.notes.setWordWrap(True)
         self.tabs.addTab(self.notes, "Notes")
-        split.addWidget(self.tabs)
+        self.timeline = TimelinePanel()
+        self.timeline.entryActivated.connect(self._on_entry_activated)
+        self.timeline.audioChanged.connect(self._on_audio_changed)
+        left = QSplitter(Qt.Vertical)
+        left.addWidget(self.tabs)
+        left.addWidget(self.timeline)
+        left.setStretchFactor(0, 3)
+        left.setStretchFactor(1, 2)
+        left.setSizes([420, 360])
+        left.setChildrenCollapsible(False)
+        split.addWidget(left)
 
         settings_scroll = QScrollArea()
         settings_scroll.setWidgetResizable(True)
@@ -499,11 +503,9 @@ class MainWindow(QMainWindow):
         reset = QPushButton("Restore default settings")
         reset.clicked.connect(self.reset_settings)
         lay.addWidget(reset)
-        ack = QPushButton("Reset acknowledgements")
-        ack.setToolTip("Show the export disclaimer again")
-        ack.clicked.connect(self.reset_acknowledgements)
-        lay.addWidget(ack)
-        lay.addWidget(self._build_info_group())
+        opts = QPushButton("Options… (theme, playback, notices, build info)")
+        opts.clicked.connect(self.open_options)
+        lay.addWidget(opts)
         lay.addStretch(1)
 
         # change notifications
@@ -679,6 +681,8 @@ class MainWindow(QMainWindow):
         ext = os.path.splitext(path)[1].lower()
         if ext == ".lyridan":
             return self.load_project(path)
+        if ext in AUDIO_EXT:
+            return self.timeline.load_audio(path)
         if ext == ".xml":
             head = open(path, "rb").read(4096).decode("utf-8", "ignore")
             if "<vocals" in head:
@@ -727,8 +731,10 @@ class MainWindow(QMainWindow):
         if src.timing in ("line", "none"):
             extra += "  ⚠ not recommended"
         self.lyrics_card.set_file(path, f"{len(src.lines)} lines, {timing}{extra}")
+        self.settings.last_session["lyrics"] = path
         self._update_lrc_banner()
         self.recalculate()
+        self._auto_audio()
 
     def _update_lrc_banner(self):
         self.lrc_banner.setVisible(bool(self.source) and self.source.timing in ("line", "none"))
@@ -771,7 +777,9 @@ class MainWindow(QMainWindow):
         name = " - ".join(x for x in (bm.artist, bm.title) if x)
         self.beat_card.set_file(path, f"{name}  ·  {bm.arrangement or 'arrangement'}, {bars} bars, "
                                       f"first beat {bm.beats[0]:.3f}s")
+        self.settings.last_session["beatmap"] = path
         self.recalculate()
+        self._auto_audio()
 
     def load_reference(self, path: str):
         try:
@@ -780,10 +788,12 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not read vocals", f"{os.path.basename(path)}\n\n{e}")
             return
         self.reference_path = path
+        self.settings.last_session["reference"] = path
         self.ref_card.set_file(path, f"{len(self.reference)} vocals")
         self.recalculate()
 
     def clear_lyrics(self):
+        self.settings.last_session.pop("lyrics", None)
         self.source = None
         self.source_path = None
         self.overrides = {}
@@ -792,12 +802,14 @@ class MainWindow(QMainWindow):
         self.recalculate()
 
     def clear_beatmap(self):
+        self.settings.last_session.pop("beatmap", None)
         self.beatmap = None
         self.beatmap_path = None
         self.beat_card.set_file(None)
         self.recalculate()
 
     def clear_reference(self):
+        self.settings.last_session.pop("reference", None)
         self.reference = []
         self.reference_path = None
         self.ref_card.set_file(None)
@@ -881,8 +893,59 @@ class MainWindow(QMainWindow):
             idx = self.table.item(row, 0).data(Qt.UserRole)
             ln = next((l for l in self.processed.lines if l.index == idx), None)
             if ln:
-                self.tabs.setCurrentIndex(1)
-                self.timeline.scroll_to_time(ln.start + self.result.offset.total - 1)
+                self._seek_line(idx)
+
+    def _seek_line(self, line_index: int):
+        """Move the playhead to the first syllable of a lyric line."""
+        if not self.result:
+            return
+        for i, li in enumerate(self.result.entry_line):
+            if li == line_index:
+                t = self.result.entries[i].time
+                self.timeline.seek_chart(max(0.0, t - 0.5))
+                self.timeline.view.scroll_to_time(t, 120)
+                return
+
+    def _on_entry_activated(self, entry_index: int):
+        """Timeline click / playback reached a syllable: select its lyric row."""
+        if not self.result or not (0 <= entry_index < len(self.result.entry_line)):
+            return
+        line_index = self.result.entry_line[entry_index]
+        for r in range(self.table.rowCount()):
+            it = self.table.item(r, 0)
+            if it and it.data(Qt.UserRole) == line_index:
+                if self.table.currentRow() != r:
+                    self.table.blockSignals(True)
+                    self.table.selectRow(r)
+                    self.table.blockSignals(False)
+                    self.table.scrollToItem(it)
+                break
+
+    def _on_audio_changed(self, path: str):
+        self.settings.last_session["audio"] = path
+        self.statusBar().showMessage(f"Audio loaded: {os.path.basename(path)}", 5000)
+
+    def _song_shift(self) -> float:
+        """Intro silence + empty bars: how much later the chart audio is than the original song."""
+        sh = self.settings.intro_silence_seconds if self.settings.intro_silence else 0.0
+        if self.settings.two_empty_bars and self.beatmap and self.beatmap.beats:
+            ms = self.beatmap.measure_starts
+            sh += self.beatmap.first_n_measures_end(self.settings.empty_bars) - (ms[0] if ms else 0.0)
+        return sh
+
+    def _auto_audio(self):
+        """Find and load the chart's audio next to the beatmap / lyrics if none is loaded."""
+        if self.timeline.player.loaded or not self.settings.auto_find_audio:
+            return
+        folders = []
+        for pth in (self.beatmap_path, self.source_path):
+            if pth:
+                d = os.path.dirname(pth)
+                folders += [d, os.path.dirname(d)]
+        title = self.beatmap.title if self.beatmap else ""
+        found = find_chart_audio(folders, title)
+        if found and self.timeline.load_audio(found, quiet=True):
+            self.statusBar().showMessage(f"Found the song audio automatically: {os.path.basename(found)}", 8000)
 
     def _on_item_changed(self, item: QTableWidgetItem):
         if self._table_updating or item.column() != 2:
@@ -916,8 +979,8 @@ class MainWindow(QMainWindow):
         bars_end = 0.0
         if self.beatmap and self.settings.two_empty_bars and self.beatmap.beats:
             bars_end = self.beatmap.first_n_measures_end(self.settings.empty_bars)
-        self.timeline.canvas.set_data(self.beatmap, res.entries if res else [], self.reference,
-                                      silence_end, bars_end)
+        self.timeline.set_project(self.beatmap, res.entries if res else [], self.reference,
+                                  silence_end, bars_end, self._song_shift())
         # offset summary
         if res:
             parts = " + ".join(f"{name} ({v:+.3f})" for name, v in res.offset.parts) or "no shift"
@@ -942,7 +1005,7 @@ class MainWindow(QMainWindow):
             if kind == "warn":
                 it.setForeground(QColor("#f5a524"))
             self.notes.addItem(it)
-        self.tabs.setTabText(3, f"Notes ({len(items)})" if items else "Notes")
+        self.tabs.setTabText(2, f"Notes ({len(items)})" if items else "Notes")
         self._update_preview()
         self._update_buttons()
 
@@ -985,6 +1048,8 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ export
     def _default_out(self, suffix: str) -> str:
+        if self.settings.export_folder and os.path.isdir(self.settings.export_folder):
+            return os.path.join(self.settings.export_folder, f"{suffix}.xml")
         if self.beatmap_path:
             return os.path.join(os.path.dirname(self.beatmap_path), f"{suffix}.xml")
         base = self.source_path or os.path.join(os.path.expanduser("~"), "lyrics")
@@ -1119,10 +1184,47 @@ class MainWindow(QMainWindow):
     def closeEvent(self, ev):
         try:
             self._read_settings_from_ui()
+            self.settings.playback_volume = self.timeline.volume.value()
+            self.settings.metronome = self.timeline.btn_metro.isChecked()
+            self.settings.follow_playhead = self.timeline.btn_follow.isChecked()
             self.settings.save()
         except Exception:  # noqa: BLE001
             pass
+        self.timeline.shutdown()
         super().closeEvent(ev)
+
+    # ------------------------------------------------------------------ options / theme / session
+    def open_options(self):
+        from .options_dialog import OptionsDialog
+        self._read_settings_from_ui()
+        OptionsDialog(self.settings, self).exec()
+
+    def apply_options(self, reset_ack: bool = False):
+        from .themes import apply_theme, current_colors
+        app = QApplication.instance()
+        apply_theme(app, self.settings.theme, self.settings.ui_font_pt)
+        colors = current_colors(self.settings.theme)
+        self.timeline.set_accent(colors["accent"] if self.settings.theme != "light" else "#2e8b57")
+        self.timeline.preview.set_font_size(self.settings.preview_font_pt)
+        self.timeline.volume.setValue(self.settings.playback_volume)
+        self.timeline.btn_metro.setChecked(self.settings.metronome)
+        self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
+        if reset_ack:
+            self._disclaimer_seen_this_session = False
+        self.update()
+
+    def restore_session(self):
+        if not self.settings.restore_session:
+            return
+        sess = dict(self.settings.last_session or {})
+        for key, loader in (("beatmap", self.load_beatmap), ("lyrics", self.load_lyrics_file),
+                            ("reference", self.load_reference)):
+            p = sess.get(key)
+            if p and os.path.isfile(p):
+                loader(p)
+        a = sess.get("audio")
+        if a and os.path.isfile(a) and not self.timeline.player.loaded:
+            self.timeline.load_audio(a, quiet=True)
 
 
 def _open_folder(path: str):
