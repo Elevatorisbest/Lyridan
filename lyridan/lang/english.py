@@ -106,6 +106,11 @@ class EnglishSyllabifier:
         return self._cmu
 
     # ------------------------------------------------------------------
+    def is_known(self, word: str) -> bool:
+        """Is this an English word (curated dictionary or CMU Pronouncing Dictionary)?"""
+        w = re.sub(r"[^a-z']", "", word.lower())
+        return bool(w) and (w in self.user or w in self.dict or w in self.cmu)
+
     def boundaries(self, core: str) -> List[int]:
         """Boundary indices for a word core (letters/apostrophes only)."""
         low = core.lower()

@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 
 from .lang import russian
 from .lang.english import get_english
-from .lang.japanese import get_japanese, resolve_native
+from .lang.japanese import get_japanese, looks_like_romaji, resolve_native
 from .lang.kana import is_japanese_char
 from .model import Line, SourceLine, SourceLyrics, SourcePiece, Syllable, Word
 from .settings import Settings
@@ -118,7 +118,8 @@ def process_alpha_line(text: str, owner: List[int], settings: Settings, lang_hin
                 last = c
             words.append(Word(sylls, source=core, lang="ru", prefix=pre, suffix=post))
             continue
-        if lang_hint == "ja_romaji":
+        if lang_hint == "ja_romaji" and (looks_like_romaji(core) or not eng.is_known(core)):
+            # romaji, unless it is clearly an English word ("stars", "broken", "the")
             parts = jp.syllabize_romaji_word(core, settings.ja.syllables)
             lang = "ja"
         else:
@@ -241,6 +242,8 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
         if sl.background and settings.background == "exclude":
             continue
         line_lang = doc_lang if settings.language != "auto" else detect_language(sl.text)
+        if line_lang in ("ja_romaji", "en", "ru") and detect_language(sl.text) == "ja":
+            line_lang = "ja"          # Japanese script is always read as Japanese
         pieces = sl.pieces
         use_romaji = (line_lang == "ja" and not native_script and settings.romanize and
                       settings.use_source_romaji and sl.romaji)

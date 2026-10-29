@@ -345,6 +345,13 @@ class JapaneseEngine:
             nxt = toks[i + 1] if i + 1 < n else None
             if t.surface in LYRIC_READINGS and t.surface != "時":
                 t.kana = t.pron = LYRIC_READINGS[t.surface]
+            # お母さん / お父さん / お兄さん / お姉さん: family words read okaasan, otousan ...
+            prev = toks[i - 1] if i > 0 else None
+            if prev is not None and prev.surface in ("お", "御") and nxt is not None and \
+                    nxt.surface in ("さん", "様", "さま", "ちゃん"):
+                fam = {"母": "カア", "父": "トウ", "兄": "ニイ", "姉": "ネエ", "爺": "ジイ", "婆": "バア"}
+                if t.surface in fam:
+                    t.kana = t.pron = fam[t.surface]
             # 何 + particle -> なに
             if t.surface == "何":
                 if nxt is None or nxt.kind != "ja":
@@ -490,10 +497,16 @@ class JapaneseEngine:
                 elif m.kind == "n" and mode in ("mora_n", "syllable"):
                     join = True
                 elif mode == "syllable":
-                    prev_r = morae[groups[-1][-1]].roma
+                    prev_m = morae[groups[-1][-1]]
+                    prev_r = prev_m.roma
                     pv = prev_r[-1:] if prev_r else ""
+                    # a vowel only lengthens the previous mora inside the same word part:
+                    # 背中|合わせ is se-na-ka-a-wa-se, not se-na-kaa-wa-se
+                    same_part = getattr(m, "tok", 0) == getattr(prev_m, "tok", 0)
                     if m.kind == "long":
                         join = True
+                    elif not same_part:
+                        join = False
                     elif m.roma in ("u",) and pv in ("o", "u") and m.kana == "ウ":
                         join = True
                     elif m.roma == "i" and pv in ("e", "i") and m.kana == "イ":
@@ -564,7 +577,10 @@ class JapaneseEngine:
                 continue
             if tok.kind == "latin":
                 flush()
-                sylls = english.syllabize(tok.surface) if english else [tok.surface]
+                if looks_like_romaji(tok.surface) and not (english and english.is_known(tok.surface)):
+                    sylls = self.syllabize_romaji_word(tok.surface, opts.syllables)
+                else:
+                    sylls = english.syllabize(tok.surface) if english else [tok.surface]
                 pos = tok.start
                 out = []
                 for s in sylls:
@@ -591,6 +607,10 @@ class JapaneseEngine:
                     prev_tok = tok
                     continue
             morae = self.romanize_token(tok, opts)
+            tok_id = getattr(self, "_tok_counter", 0) + 1
+            self._tok_counter = tok_id
+            for m in morae:
+                m.tok = tok_id  # type: ignore[attr-defined]
             mspans = [orig_span(a, b) for a, b in self.mora_char_spans(tok, morae)]
             if cur is not None and self._attach_to_prev(tok, prev_tok, opts):
                 cur["morae"] += morae
@@ -685,6 +705,32 @@ class JapaneseEngine:
         groups[0] = pre + groups[0]
         groups[-1] = groups[-1] + post
         return groups
+
+
+def looks_like_romaji(word: str) -> bool:
+    """True if a Latin word can be read as Hepburn romaji ("senakaawase", "sayonara").
+
+    English words almost always contain letter clusters romaji cannot ("stars",
+    "broken", "the", "just", "sky"), so they fail this test and stay English.
+    """
+    from .kana import _ROMA_UNITS
+    w = word.lower().strip(".,!?;:\"()[]")
+    for a, b in (("ā", "a"), ("ī", "i"), ("ū", "u"), ("ē", "e"), ("ō", "o")):
+        w = w.replace(a, b)
+    if len(w) < 2 or not re.fullmatch(r"[a-z']+", w) or w.startswith("'") or w.endswith("'"):
+        return False
+    units = [u.replace("'", "") for u in split_romaji(w)]
+    valid = set(_ROMA_UNITS)
+    for i, u in enumerate(units):
+        nxt = units[i + 1] if i + 1 < len(units) else ""
+        if u in valid or u == "n":
+            continue
+        if len(u) == 1 and u not in "aiueon" and (nxt.startswith(u) or (u == "t" and nxt.startswith("ch"))):
+            continue                                   # geminate: kitte, matcha
+        if u == "m" and nxt[:1] in ("b", "m", "p"):
+            continue                                   # traditional Hepburn: sempai
+        return False
+    return True
 
 
 def resolve_native(words: List[Word], text: str):

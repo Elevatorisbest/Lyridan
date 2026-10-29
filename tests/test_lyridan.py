@@ -326,3 +326,34 @@ def test_export_entry_line_mapping():
     assert len(res.entry_line) == len(res.entries)
     first_line = [l for l in pr.lines if not l.background][0].index
     assert res.entry_line[0] == first_line and res.entry_line == sorted(res.entry_line)
+
+
+# ----------------------------------------------------------------- mixed Japanese / English lyrics
+def test_romaji_vs_english_detection():
+    from lyridan.lang.japanese import looks_like_romaji
+    for w in ("senakaawase", "sayonara", "kitte", "matcha", "sempai", "shin'ai", "arigatou"):
+        assert looks_like_romaji(w), w
+    for w in ("stars", "broken", "the", "just", "sky", "fleeting", "night", "Don't"):
+        assert not looks_like_romaji(w), w
+
+
+def test_long_vowels_only_join_inside_a_word():
+    assert ja("背中合わせ", syllables="syllable") == "se-na-ka-a-wa-se"   # senaka + awase
+    assert ja("東京", syllables="syllable") == "tou-kyou"
+    assert ja("ラーメン", syllables="syllable") == "raa-men"
+    assert ja("お母さん", syllables="syllable") == "o-kaa-san"
+    assert ja("お母さん") == "o-ka-a-san"
+
+
+@pytest.mark.parametrize("language", ["auto", "ja", "ja_romaji"])
+@pytest.mark.parametrize("mode", ["mora_n", "syllable"])
+def test_english_inside_japanese_lyrics(language, mode):
+    from lyridan.parsers.lrc import parse_lrc
+    s = Settings()
+    s.language, s.ja.syllables = language, mode
+    lrc = ("[00:10.00]Under the broken sky, we rewrite the stars.\n"
+           "[00:15.00]背中合わせで刻むシーケンス\n[00:20.00]\n")
+    res = build_vocals(process(parse_lrc(lrc), s).lines, s, None)
+    lyr = [e.lyric for e in res.entries]
+    assert "stars+" in lyr and "s-" not in lyr
+    assert lyr[lyr.index("Se-"):lyr.index("Se-") + 6] == ["Se-", "na-", "ka-", "a-", "wa-", "se"]
