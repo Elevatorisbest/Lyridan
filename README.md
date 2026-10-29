@@ -256,7 +256,7 @@ Open them with the **⚙ Options** button at the top right (or Edit → Options)
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>
 
-*The screenshots use made-up demo lyrics.*
+*The screenshots use made-up demo lyrics by Claude only to avoid putting too much of real songs in the repo. Elevatorisbest is against generative AI usage and this does not constitute support or endorsement of such stuff.*
 
 **Light**
 
