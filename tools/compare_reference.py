@@ -16,11 +16,11 @@ F = os.path.join(ROOT, "tests", "fixtures")
 
 def run(settings=None, verbose=False):
     s = settings or Settings()
-    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    src = load_lyrics(os.path.join(F, "test_song.ttml"))
     bm = parse_beatmap(os.path.join(F, "baby_be_mine_bass.xml"))
     pr = process(src, s)
     res = build_vocals(pr.lines, s, bm, src.lyric_offset, src.leading_silence)
-    ref = parse_vocals(os.path.join(F, "baby_be_mine_vocals_reference.xml"))
+    ref = parse_vocals(os.path.join(F, "test_song_vocals_reference.xml"))
     a = [e.lyric.lower() for e in ref]
     b = [e.lyric.lower() for e in res.entries]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)

@@ -67,7 +67,7 @@ jobs:
       - name: Smoke test (frozen app converts English + Japanese)
         shell: bash
         run: |
-          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/baby_be_mine.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/test_song.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
           ./dist/Lyridan/Lyridan.exe convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
           for i in 1 2 3 4 5 6 7 8 9 10; do [ -f smoke_en.xml ] && [ -f smoke_ja.xml ] && break; sleep 2; done
           grep -q 'lyric="Ki-"' smoke_ja.xml
@@ -121,7 +121,7 @@ jobs:
         run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/lyridan.spec
       - name: Smoke test (frozen app converts English + Japanese)
         run: |
-          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/baby_be_mine.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/test_song.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
           dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
           grep -q 'lyric="Ki-"' smoke_ja.xml
           grep -q 'count="419"' smoke_en.xml

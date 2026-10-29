@@ -56,6 +56,41 @@ def _boundaries_from_hyphenated(h: str) -> List[int]:
     return cuts
 
 
+_VOWELS = set("aeiouyéèêáàäöüïëâ")
+
+
+def _clean_cuts(word: str, cuts: List[int]) -> List[int]:
+    """Fix dictionary splits that leave a syllable without a vowel ("tor-ch", "am-b-ling",
+    "com-m"): the stray consonants join the next syllable when it starts with l/r ("bling"),
+    otherwise the previous one ("torch"). Possessives/contractions ("-n't", "s's"), "-sm"
+    endings and spelled-out letters (c-i-a) are left alone."""
+    if not cuts:
+        return cuts
+    bounds = [0] + [c for c in cuts if 0 < c < len(word)] + [len(word)]
+    parts = [word[a:b] for a, b in zip(bounds, bounds[1:])]
+    if all(len(p) == 1 for p in parts):          # acronyms: c-i-a
+        return cuts
+    changed = True
+    while changed and len(parts) > 1:
+        changed = False
+        for i, part in enumerate(parts):
+            if any(ch in _VOWELS for ch in part) or "'" in part or part in ("sm", "sms"):
+                continue
+            if i + 1 < len(parts) and parts[i + 1][:1] in ("l", "r"):
+                parts[i:i + 2] = [part + parts[i + 1]]
+            elif i > 0:
+                parts[i - 1:i + 1] = [parts[i - 1] + part]
+            else:
+                parts[0:2] = [part + parts[1]]
+            changed = True
+            break
+    out, pos = [], 0
+    for part in parts[:-1]:
+        pos += len(part)
+        out.append(pos)
+    return out
+
+
 class EnglishSyllabifier:
     _lock = threading.Lock()
 
@@ -74,8 +109,8 @@ class EnglishSyllabifier:
             for line in fh:
                 s = line.strip().lower()
                 if s and "." not in s:
-                    plain = s.replace("•", "")
-                    self.dict[plain] = _boundaries_from_hyphenated(s)
+                    plain = s.replace("•", "").rstrip("-")
+                    self.dict[plain] = _clean_cuts(plain, _boundaries_from_hyphenated(s.rstrip("-")))
         for w, h in BUILTIN_OVERRIDES.items():
             self.dict[w] = _boundaries_from_hyphenated(h)
         self.model = BoundaryModel.load(os.path.join(DATA_DIR, "english_model.json.gz"))

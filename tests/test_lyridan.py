@@ -100,13 +100,14 @@ def test_russian_schemes():
 
 # ----------------------------------------------------------------- end to end
 def test_reference_chart():
-    """Generated vocals must closely match the hand-made reference chart."""
+    """Generated vocals must closely match a hand-made vocal track (timing from the author's own
+    hand-made chart; the lyrics in the test files are made-up words with the same syllables)."""
     import difflib
     s = Settings()
-    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    src = load_lyrics(os.path.join(F, "test_song.ttml"))
     bm = parse_beatmap(os.path.join(F, "baby_be_mine_bass.xml"))
     res = build_vocals(process(src, s).lines, s, bm, src.lyric_offset, src.leading_silence)
-    ref = parse_vocals(os.path.join(F, "baby_be_mine_vocals_reference.xml"))
+    ref = parse_vocals(os.path.join(F, "test_song_vocals_reference.xml"))
     assert abs(res.offset.total - 14.024) < 1e-6
     a = [e.lyric.lower().rstrip("+-") for e in ref]
     b = [e.lyric.lower().rstrip("+-") for e in res.entries]
@@ -121,11 +122,11 @@ def test_reference_chart():
 def test_enhanced_lrc_and_overrides():
     s = Settings()
     src = load_lyrics(os.path.join(F, "english_enhanced.lrc"))
-    pr = process(src, s, overrides={0: "Ev-ery mo-ment / takes me to pa-ra-dise"})
+    pr = process(src, s, overrides={0: "Ev-ery lan-tern / takes me to ca-ra-van"})
     assert pr.lines[0].manual
     res = build_vocals(pr.lines, s, None)
     lyr = [e.lyric for e in res.entries]
-    assert lyr[:5] == ["Ev-", "ery", "mo-", "ment+", "Takes"]
+    assert lyr[:5] == ["Ev-", "ery", "lan-", "tern+", "Takes"]
 
 
 def test_japanese_ttml_romaji_and_native():
@@ -195,7 +196,7 @@ def test_ctc_align_and_offset_detection():
 
 def test_ttml_writer_roundtrip(tmp_path):
     from lyridan.exports import ttml
-    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    src = load_lyrics(os.path.join(F, "test_song.ttml"))
     p = tmp_path / "x.ttml"
     p.write_text(ttml(src), encoding="utf-8")
     back = load_lyrics(str(p))
@@ -214,8 +215,8 @@ def test_alignment_real_song():
     model = os.environ["LYRIDAN_ALIGN_MODEL"]
     meta = json.load(open(os.path.splitext(model)[0] + ".json"))
     s = Settings()
-    truth = process(load_lyrics(os.path.join(F, "baby_be_mine.ttml")), s)
-    src = load_lyrics(os.path.join(F, "baby_be_mine.lrc"))
+    truth = process(load_lyrics(os.path.join(F, "test_song.ttml")), s)
+    src = load_lyrics(os.path.join(F, "test_song.lrc"))
     al, rep = align_lyrics(src, os.environ["LYRIDAN_TEST_AUDIO"], s, model, meta)
     assert abs(rep.offset - 14.024) < 0.1           # chart audio = song + 10 s + 2 bars
     flat = lambda pr: [(x.text.lower(), x.start) for l in pr.lines if not l.background for x in l.syllables()]
@@ -305,7 +306,7 @@ def test_audio_player_silent_clock(tmp_path):
 
 def test_export_entry_line_mapping():
     s = Settings()
-    src = load_lyrics(os.path.join(F, "baby_be_mine.ttml"))
+    src = load_lyrics(os.path.join(F, "test_song.ttml"))
     pr = process(src, s)
     res = build_vocals(pr.lines, s, None)
     assert len(res.entry_line) == len(res.entries)
