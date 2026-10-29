@@ -72,6 +72,8 @@ class Settings:
     playback_volume: int = 80
     metronome: bool = False
     follow_playhead: bool = True
+    timeline_arrow_step: str = "beat"      # 0.1s | quarter | half | beat | bar | 1s
+    timeline_accelerate: bool = True       # arrow keys speed up while held
     export_folder: str = ""                # "" = next to the beatmap / lyrics
     last_session: Dict[str, str] = field(default_factory=dict)
 

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QMes
 from ..parsers.rsxml import Beatmap, VocalEntry
 from .audio_player import AudioPlayer
 from .lyric_preview import LyricPreview
-from .timeline import TimelineView
+from .timeline import SHORTCUTS_HTML, OverviewBar, TimelineView
 
 AUDIO_EXT = (".wav", ".ogg", ".flac", ".mp3", ".opus", ".m4a", ".aif", ".aiff")
 AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.opus *.m4a *.aif *.aiff);;All files (*)"
@@ -58,6 +58,11 @@ def find_chart_audio(folders: List[str], title: str = "") -> Optional[str]:
     return max(cands, key=rank)
 
 
+def _mmss(t: float) -> str:
+    m, s = divmod(int(max(0.0, t)), 60)
+    return f"{m}:{s:02d}"
+
+
 def _json_paths(obj):
     if isinstance(obj, dict):
         for v in obj.values():
@@ -72,6 +77,7 @@ def _json_paths(obj):
 class TimelinePanel(QWidget):
     entryActivated = Signal(int)        # vocal entry index clicked / reached
     audioChanged = Signal(str)
+    leaveRequested = Signal()           # Esc in the timeline
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -142,28 +148,73 @@ class TimelinePanel(QWidget):
         self.nudge.setSuffix(" ms")
         self.nudge.setToolTip("Shift only the preview audio (does not change the export)")
         self.nudge.valueChanged.connect(self._update_shift)
-        zoom_out = QToolButton()
-        zoom_out.setText("−")
-        zoom_out.setToolTip("Zoom out (Ctrl + wheel)")
-        zoom_in = QToolButton()
-        zoom_in.setText("+")
-        zoom_in.setToolTip("Zoom in (Ctrl + wheel)")
         for wdg in (self.btn_audio, self.audio_label, self.btn_start, self.btn_play, self.time_label):
             bar.addWidget(wdg)
         bar.addStretch(1)
-        for wdg in (QLabel("Audio is"), self.audio_mode, self.nudge, self.speed, QLabel("🔊"), self.volume, self.btn_metro,
-                    self.btn_follow, zoom_out, zoom_in):
+        for wdg in (QLabel("Audio is"), self.audio_mode, self.nudge, self.speed, QLabel("🔊"), self.volume,
+                    self.btn_metro, self.btn_follow):
             bar.addWidget(wdg)
         lay.addLayout(bar)
 
         self.preview = LyricPreview()
         lay.addWidget(self.preview)
         self.view = TimelineView()
+
+        # navigation row: jump to a section, whole-song overview, zoom, keyboard help
+        nav = QHBoxLayout()
+        nav.setSpacing(4)
+        self.section_box = QComboBox()
+        self.section_box.setToolTip("Jump to a section of the song (PgUp / PgDn in the timeline)")
+        self.section_box.setMinimumWidth(150)
+        self.section_box.activated.connect(self._section_chosen)
+        self.overview = OverviewBar(self.view)
+        self.overview.jumpRequested.connect(self.view.center_on)
+        self.overview.seekRequested.connect(lambda t: (self.seek_chart(t), self.view.center_on(t)))
+        btn_fit = QToolButton()
+        btn_fit.setText("Fit")
+        btn_fit.setToolTip("Show the whole song (F)")
+        btn_fit.clicked.connect(self.view.fit)
+        zoom_out = QToolButton()
+        zoom_out.setText("−")
+        zoom_out.setToolTip("Zoom out (↓ or Ctrl + wheel)")
+        zoom_out.clicked.connect(lambda: self.zoom_by(1 / 1.4))
+        zoom_in = QToolButton()
+        zoom_in.setText("+")
+        zoom_in.setToolTip("Zoom in (↑ or Ctrl + wheel)")
+        zoom_in.clicked.connect(lambda: self.zoom_by(1.4))
+        self.btn_keys = QToolButton()
+        self.btn_keys.setText("⌨")
+        self.btn_keys.setToolTip(SHORTCUTS_HTML)
+        self.btn_keys.clicked.connect(lambda: QMessageBox.information(self, "Timeline controls", SHORTCUTS_HTML))
+        self.focus_label = QLabel()
+        self.focus_label.setMinimumWidth(140)
+        nav.addWidget(self.section_box)
+        nav.addWidget(self.overview, 1)
+        for wdg in (btn_fit, zoom_out, zoom_in, self.btn_keys, self.focus_label):
+            nav.addWidget(wdg)
+        lay.addLayout(nav)
         lay.addWidget(self.view, 1)
-        zoom_out.clicked.connect(lambda: self.view.canvas.set_zoom(self.view.canvas.pps / 1.4))
-        zoom_in.clicked.connect(lambda: self.view.canvas.set_zoom(self.view.canvas.pps * 1.4))
-        self.view.canvas.seekRequested.connect(self.seek_chart)
-        self.view.canvas.entryClicked.connect(self.entryActivated.emit)
+
+        c = self.view.canvas
+        c.seekRequested.connect(self.seek_chart)
+        c.navRequested.connect(self.navigate)
+        c.entryClicked.connect(self.entryActivated.emit)
+        c.playLineRequested.connect(self.play_from)
+        c.zoomKeyRequested.connect(self.zoom_by)
+        c.fitRequested.connect(self.view.fit)
+        c.leaveRequested.connect(self.leaveRequested.emit)
+        c.focusChanged.connect(self._show_focus)
+        self._show_focus(False)
+
+        # safeguard: toolbar controls never keep the keyboard, so arrow keys meant for the
+        # timeline cannot change the speed, audio mode, volume... by accident
+        for wdg in self.findChildren(QToolButton) + [self.volume]:
+            wdg.setFocusPolicy(Qt.NoFocus)
+        for box in (self.speed, self.audio_mode, self.section_box):
+            box.setFocusPolicy(Qt.ClickFocus)
+            box.activated.connect(lambda *_: c.setFocus(Qt.OtherFocusReason))
+        self.nudge.setFocusPolicy(Qt.ClickFocus)
+        self.nudge.editingFinished.connect(lambda: c.setFocus(Qt.OtherFocusReason))
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
@@ -181,6 +232,8 @@ class TimelinePanel(QWidget):
         self.song_shift = song_shift
         self.view.canvas.set_data(beatmap, self.entries, reference, silence_end, bars_end)
         self.preview.set_entries(self.entries)
+        self._fill_sections()
+        self.overview.update()
         self._update_shift()
         if not self.player.playing:
             self._show_time(self.chart_time())
@@ -276,6 +329,62 @@ class TimelinePanel(QWidget):
             self._cursor = t
         self._tick()
 
+    def navigate(self, t: float):
+        """Keyboard navigation: move the playhead and keep it in view."""
+        self.seek_chart(max(0.0, t))
+        self.view.ensure_visible_time(self.chart_time(), page=False)
+
+    def play_from(self, t: float):
+        self.seek_chart(max(0.0, t - 0.3))
+        self.view.ensure_visible_time(t, page=False)
+        if self.player.loaded and not self.player.playing:
+            self.toggle_play()
+
+    def zoom_by(self, factor: float):
+        """Zoom keeping the playhead (or the view centre) where it is on screen."""
+        v = self.view
+        c = v.canvas
+        a, b = v.visible_range()
+        t = self.chart_time()
+        if not (a <= t <= b):
+            t = (a + b) / 2
+        screen_x = c.x(t) - v.horizontalScrollBar().value()
+        v.zoom_at(t, screen_x, c.pps * factor)
+
+    def _fill_sections(self):
+        box = self.section_box
+        box.blockSignals(True)
+        box.clear()
+        secs = self.view.canvas.sections
+        box.addItem("Go to section…" if secs else "No sections in the chart", None)
+        if self.view.canvas.lines:
+            box.addItem(f"First lyric  ({_mmss(self.view.canvas.lines[0].start)})",
+                        max(0.0, self.view.canvas.lines[0].start - 1.0))
+        for sct in secs:
+            box.addItem(f"{sct.label}  ({_mmss(sct.start)})", sct.start)
+        box.setCurrentIndex(0)
+        box.blockSignals(False)
+
+    def _section_chosen(self, i: int):
+        t = self.section_box.itemData(i)
+        self.section_box.setCurrentIndex(0)
+        if t is None:
+            return
+        self.seek_chart(t)
+        self.view.scroll_to_time(t, 40)
+
+    def _show_focus(self, on: bool):
+        if on:
+            self.focus_label.setText("⌨ Keys on · Esc leaves")
+            self.focus_label.setStyleSheet("color: palette(highlight); font-weight: bold;")
+        else:
+            self.focus_label.setText("Click timeline for keys")
+            self.focus_label.setStyleSheet("color: gray;")
+
+    def set_navigation(self, arrow_step: str, accelerate: bool):
+        self.view.canvas.arrow_step = arrow_step
+        self.view.canvas.accelerate = accelerate
+
     def go_first_lyric(self):
         if self.entries:
             t = max(0.0, self.entries[0].time - 2.0)
@@ -298,6 +407,7 @@ class TimelinePanel(QWidget):
         self.view.canvas.set_playhead(t, ai)
         self.preview.set_time(t)
         self._show_time(t)
+        self.overview.update()
         if self.follow and self.player.playing:
             self.view.ensure_visible_time(t)
         if ai != self._last_active:

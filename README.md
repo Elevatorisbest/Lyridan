@@ -29,12 +29,14 @@ Version 2.0 is a full rewrite of the app.
 - **Timeline with playback and an in-game lyrics preview:** below the lyrics you see:
   - the song's waveform
   - your chart's measures, sections and notes
-  - the generated vocals, with a mark at every Rocksmith line break
-  - an optional reference vocals XML to compare against
+  - the generated vocals in two rows: **Lyric lines** (each Rocksmith line as one block with its full text) and **Syllables** (one bar per syllable, joined within a word, with a mark at every line break)
+  - an optional reference vocals XML in the same two-row form, to compare against
 
   Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung, the next line waits below. It is built from the exact vocals that will be exported, so you check the final sync and line breaks before exporting.
-  - **Navigation:** click anywhere to seek; click a lyric to jump to its line in the table. Double-clicking a line's time in the table moves the playhead there.
-  - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead, zoom with Ctrl + mouse wheel.
+  - **Getting around:** an overview strip shows the whole song (sections and lyric lines); click or drag it to look at any part. **Go to section…** jumps straight to a section, **Fit** shows the whole song. In the timeline: click to move the playhead (drag to scrub), click a section to jump to it, double-click a lyric line to play it, wheel to scroll (Shift = faster), Ctrl + wheel to zoom, right/middle-drag to pan.
+  - **Keyboard** (after clicking the timeline; a coloured frame shows it is listening and **Esc** gives the keyboard back, so these keys never change settings elsewhere): ← → step the playhead (by 1/4 beat … a bar, set in Options; speeds up while held), Shift = 4× steps, Ctrl/Alt + ← → previous/next lyric line, PgUp/PgDn previous/next section, Home/End, ↑ ↓ zoom, Space play/pause, Enter play the current line, F fit. The ⌨ button lists them.
+  - **No accidental changes:** the mouse wheel over a number box, drop-down or slider in the settings scrolls the panel instead of changing the value, unless you clicked into that field first.
+  - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
   - **Finding the audio:** Lyridan picks up the song audio by itself. It looks in a DLC Builder project (`.rs2dlc`) or for audio files next to your chart XML, and reuses the audio from the alignment tool. You can also drop an audio file on the window.
   - **Chart audio or original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
 - **Options** (Edit → Options): themes (System, Light, Dark and the original black-and-yellow **Lyridan Dark** from v1.x), text sizes, playback defaults, reopening the last session, default export folder, export-disclaimer and acknowledgement reset, alignment-model management and the build information.

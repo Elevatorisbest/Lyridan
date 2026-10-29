@@ -80,8 +80,21 @@ class OptionsDialog(QDialog):
         self.follow = QCheckBox("Timeline follows the playhead")
         self.follow.setChecked(self.s.follow_playhead)
         f.addRow(self.follow)
-        tip = QLabel("Shortcuts: Space = play/pause (timeline focused) · Ctrl+P = play/pause anywhere · "
-                     "Ctrl + mouse wheel = zoom · click the timeline to seek · click a lyric to jump to its line.")
+        from .timeline import ARROW_STEPS
+        self.arrow_step = QComboBox()
+        for k, label in ARROW_STEPS.items():
+            self.arrow_step.addItem(label, k)
+        self.arrow_step.setCurrentIndex(max(0, self.arrow_step.findData(self.s.timeline_arrow_step)))
+        self.arrow_step.setToolTip("How far one press of ← / → moves the playhead in the timeline "
+                                   "(Shift = 4× as far)")
+        f.addRow("Arrow keys move by", self.arrow_step)
+        self.accel = QCheckBox("Speed up while an arrow key is held")
+        self.accel.setChecked(self.s.timeline_accelerate)
+        f.addRow(self.accel)
+        tip = QLabel("Timeline keys work only after you click the timeline (a coloured frame shows it); Esc gives "
+                     "the keyboard back. ← → step · Shift = faster · Ctrl/Alt + ← → = lines · PgUp/PgDn = "
+                     "sections · ↑ ↓ = zoom · Space = play/pause · Enter = play the line · Ctrl+P = play/pause "
+                     "anywhere.")
         tip.setWordWrap(True)
         tip.setStyleSheet("color: gray;")
         f.addRow(tip)
@@ -182,6 +195,8 @@ class OptionsDialog(QDialog):
         s.playback_volume = self.vol.value()
         s.metronome = self.metro.isChecked()
         s.follow_playhead = self.follow.isChecked()
+        s.timeline_arrow_step = self.arrow_step.currentData()
+        s.timeline_accelerate = self.accel.isChecked()
         s.restore_session = self.restore.isChecked()
         s.export_folder = self.export_dir.text().strip()
         s.disclaimer_acknowledged = not self.disclaimer.isChecked()

@@ -394,3 +394,20 @@ def test_reading_verification_helpers():
                     ReadingChange(1, "瞬き", "瞬き", "まばたき", "またたき", 3.6, applied=False)]
     s = rep.summary()
     assert "緋 ひ → あか" in s and "check by ear" in s and "またたき?" in s
+
+
+def test_timeline_lines_sections_and_steps():
+    pytest.importorskip("PySide6")
+    from lyridan.gui.timeline import display_syllable, lines_of, sections_of
+    from lyridan.parsers.rsxml import Beatmap, VocalEntry
+    es = [VocalEntry(1.0, 0.2, "Eve-"), VocalEntry(1.3, 0.2, "ry"), VocalEntry(1.6, 0.3, "day+"),
+          VocalEntry(3.0, 0.5, "Ooh+")]
+    ls = lines_of(es)
+    assert [l.text for l in ls] == ["Every day", "Ooh"]
+    assert (ls[0].first, ls[0].last, ls[1].first) == (0, 2, 3)
+    assert display_syllable("Eve-") == "Eve" and display_syllable("day+") == "day"
+    bm = Beatmap(beats=[0.0, 0.5, 1.0, 1.5, 2.0], measure_flags=[True, False, True, False, True])
+    bm.sections = [(0.0, "intro"), (1.0, "verse"), (2.0, "verse"), (3.0, "prechorus")]
+    ss = sections_of(bm, 10.0)
+    assert [s.label for s in ss] == ["Intro", "Verse 1", "Verse 2", "Pre-chorus"]
+    assert ss[-1].end == 10.0

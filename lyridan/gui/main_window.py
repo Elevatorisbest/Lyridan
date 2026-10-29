@@ -127,6 +127,8 @@ class MainWindow(QMainWindow):
 
         self._build_menu()
         self._build_ui()
+        self._wheel_guard = WheelGuard(self)
+        QApplication.instance().installEventFilter(self._wheel_guard)
         self._load_settings_into_ui()
         if buildinfo.is_dev():
             i = buildinfo.info()
@@ -248,12 +250,13 @@ class MainWindow(QMainWindow):
         self.timeline = TimelinePanel()
         self.timeline.entryActivated.connect(self._on_entry_activated)
         self.timeline.audioChanged.connect(self._on_audio_changed)
+        self.timeline.leaveRequested.connect(lambda: self.table.setFocus(Qt.OtherFocusReason))
         left = QSplitter(Qt.Vertical)
         left.addWidget(self.tabs)
         left.addWidget(self.timeline)
         left.setStretchFactor(0, 3)
         left.setStretchFactor(1, 2)
-        left.setSizes([420, 360])
+        left.setSizes([360, 440])
         left.setChildrenCollapsible(False)
         split.addWidget(left)
 
@@ -1209,6 +1212,7 @@ class MainWindow(QMainWindow):
         self.timeline.volume.setValue(self.settings.playback_volume)
         self.timeline.btn_metro.setChecked(self.settings.metronome)
         self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
+        self.timeline.set_navigation(self.settings.timeline_arrow_step, self.settings.timeline_accelerate)
         if reset_ack:
             self._disclaimer_seen_this_session = False
         self.update()
@@ -1225,6 +1229,34 @@ class MainWindow(QMainWindow):
         a = sess.get("audio")
         if a and os.path.isfile(a) and not self.timeline.player.loaded:
             self.timeline.load_audio(a, quiet=True)
+
+
+class WheelGuard(QObject):
+    """Safeguard: the mouse wheel over a settings field (number box, drop-down, slider) scrolls
+    the panel instead of changing the value, unless you clicked into that field first."""
+
+    def eventFilter(self, obj, ev):
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox
+        if ev.type() != QEvent.Wheel:
+            return False
+        w = obj
+        if isinstance(w, QWidget) and not isinstance(w, (QAbstractSpinBox, QComboBox, QAbstractSlider)):
+            par = w.parentWidget()
+            if isinstance(par, QAbstractSpinBox):    # the line edit inside a spin box
+                w = par
+        if not isinstance(w, (QAbstractSpinBox, QComboBox, QAbstractSlider)) or w.hasFocus():
+            return False
+        from PySide6.QtWidgets import QScrollBar
+        if isinstance(w, QScrollBar):
+            return False                              # a real scroll bar
+        p = w.parentWidget()
+        while p is not None and not isinstance(p, QAbstractScrollArea):
+            p = p.parentWidget()
+        if p is not None:
+            bar = p.verticalScrollBar()
+            bar.setValue(bar.value() - ev.angleDelta().y())
+        return True
 
 
 def _open_folder(path: str):
