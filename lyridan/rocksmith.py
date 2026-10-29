@@ -158,11 +158,16 @@ def split_lines(lines: List[Line], settings: Settings, native_cjk: bool = False)
             if cw:
                 out.append(RSLine(cw, ct))
             continue
-        # 1) split at big timing gaps
+        # 1) split at real pauses - but never into a fragment that a charter would
+        #    rejoin by hand ("Ya" / "zhdu otveta" after a held note), and never
+        #    right after a word that belongs to the next phrase ("ne" / "mogu")
         chunks: List[Tuple[List[Word], List[List[str]]]] = []
         cw, ct = [words[0]], [texts[0]]
-        for w, t in zip(words[1:], texts[1:]):
-            if w.start - cw[-1].end >= settings.gap_split_seconds:
+        for i in range(1, len(words)):
+            w, t = words[i], texts[i]
+            gap = w.start - cw[-1].end
+            if gap >= settings.gap_split_seconds and _gap_split_ok(cw, ct, words[i:], texts[i:], gap,
+                                                                   native_cjk):
                 chunks.append((cw, ct))
                 cw, ct = [], []
             cw.append(w)
@@ -181,17 +186,72 @@ def _len(texts: List[List[str]], cjk: bool) -> int:
     return sum(len("".join(t)) for t in texts) + max(0, len(texts) - 1)
 
 
-# Words that bind to the following word: avoid ending a line with them.
-_BIND_RIGHT = set("""a an the my your his her its our their this that's to of in on at for from with by
+# ---- phrase rules per language ------------------------------------------------
+# Words that belong to the *next* word: a line should not end with them.
+_BIND_RIGHT = {
+    "en": set("""a an the my your his her its our their this that's to of in on at for from with by
 and or but nor so if as than because i i'm i'll i've i'd we we're we'll they they're he she it's
-you're you'll won't don't can't is are was were be will would could should can just very no""".split())
+you're you'll won't don't can't is are was were be will would could should can just very no""".split()),
+    # Russian (Cyrillic source, ё written as е): prepositions, conjunctions, negation, subject pronouns
+    "ru": set("""в во на за с со к ко по о об обо из от до у про при без для над под через перед между
+сквозь из-за из-под около вокруг после среди и а но или да что чтобы как где куда когда если хотя
+ни не я ты он она оно мы вы они мой моя мое мои твой твоя твое твои наш наша наше наши этот эта это
+эти тот та те весь вся все самый очень так""".split()),
+    "ja": set(),
+}
+# Words that belong to the *previous* word: a line should not start with them.
+_BIND_LEFT = {
+    "en": set("""'s n't 're 've 'll 'd""".split()),
+    "ru": set("ли же ж бы б".split()),
+    # Japanese particles / copula written as separate romaji words
+    "ja": set("""は が の を に で と も へ か よ ね な や から まで より って わ ぞ ぜ さ だ です でしょう
+じゃ wa ga no o wo ni de to mo e ka yo ne na ya kara made yori tte da desu""".split()),
+}
 # Words that naturally start a phrase: slight bonus for starting a line with them.
-_PHRASE_START = set("""and but so or that to as when while if in on for with because cause till until
-where who what how why then""".split())
+_PHRASE_START = {
+    "en": set("""and but so or that to as when while if in on for with because cause till until
+where who what how why then""".split()),
+    "ru": set("""и а но или что чтобы как где куда когда если хотя пока потому зато ведь""".split()),
+    "ja": set(),
+}
 
 
-def _plain(w: Word) -> str:
+def _key(w: Word) -> Tuple[str, str]:
+    """(language, normalised word) - Russian/Japanese use the native spelling."""
+    lang = w.lang if w.lang in _BIND_RIGHT else "en"
+    base = w.source if (lang in ("ru", "ja") and w.source) else w.text
+    base = re.sub(r"[^\w'\-]", "", base.lower()).replace("ё", "е").strip("-")
+    return lang, base
+
+
+def _binds_right(w: Word) -> bool:
+    lang, k = _key(w)
+    return k in _BIND_RIGHT[lang] and not re.search(r"[,.;:!?、。！？]", w.suffix or "")
+
+
+def _binds_left(w: Word) -> bool:
+    lang, k = _key(w)
+    return k in _BIND_LEFT[lang] or _key_text(w) in _BIND_LEFT[lang]
+
+
+def _key_text(w: Word) -> str:
     return re.sub(r"[^\w']", "", w.text).lower()
+
+
+def _starts_phrase(w: Word) -> bool:
+    lang, k = _key(w)
+    return k in _PHRASE_START[lang]
+
+
+def _gap_split_ok(lw, lt, rw, rt, gap: float, cjk: bool) -> bool:
+    """Is a pause a good place for a new Rocksmith line?"""
+    def substantial(ws, ts):
+        return len(ws) >= 2 or _len(ts, cjk) >= (8 if not cjk else 6)
+    if gap >= 3.0:                      # clearly separate phrases
+        return True
+    if not (substantial(lw, lt) and substantial(rw, rt)):
+        return False
+    return not _binds_right(lw[-1]) and not _binds_left(rw[0])
 
 
 def _split_long(words: List[Word], texts: List[List[str]], max_chars: int, cjk: bool):
@@ -210,11 +270,12 @@ def _split_long(words: List[Word], texts: List[List[str]], max_chars: int, cjk: 
             score += 1.2
         if i < 2 or len(words) - i < 2:
             score -= 0.6
-        if not cjk:
-            if _plain(words[i - 1]) in _BIND_RIGHT:
-                score -= 0.5
-            if _plain(words[i]) in _PHRASE_START:
-                score += 0.2
+        if _binds_right(words[i - 1]):
+            score -= 0.6
+        if _binds_left(words[i]):
+            score -= 0.8
+        if _starts_phrase(words[i]):
+            score += 0.2
         if left > max_chars or right > max_chars:
             score -= 0.3
         if best_score is None or score > best_score:

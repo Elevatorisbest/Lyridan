@@ -224,3 +224,30 @@ def test_alignment_real_song():
     errs = [abs(X[j + k][1] - T[i + k][1]) for i, j, n in sm.get_matching_blocks() for k in range(n)]
     assert statistics.median(errs) < 0.12
     assert sum(e < 0.2 for e in errs) / len(errs) > 0.75
+
+
+def _rs_lines(lines, s):
+    return [" ".join("".join(t) for t in rl.texts) for rl in build_vocals(lines, s, None).lines]
+
+
+def test_no_fragment_after_held_note():
+    """A held first word must not become its own line ("Ya" / "zhdu otveta")."""
+    from lyridan.model import SourceLine, SourceLyrics, SourcePiece
+    pieces = [SourcePiece("Я", 56.20, 56.30), SourcePiece("жду", 58.70, 59.20),
+              SourcePiece("ответа", 59.20, 60.50)]
+    src = SourceLyrics([SourceLine(pieces, 56.2, 60.5)], timing="word")
+    s = Settings()
+    assert _rs_lines(process(src, s).lines, s) == ["Ya zhdu otveta"]
+
+
+def test_russian_phrase_aware_split():
+    """Long Russian lines are not split right after negation / prepositions."""
+    from lyridan.model import SourceLine, SourceLyrics, SourcePiece
+    words = "Про то, что больше не могу смотреть на дерьмо".split()
+    pieces = [SourcePiece(w, 31.24 + 0.3 * i, 31.24 + 0.3 * (i + 1)) for i, w in enumerate(words)]
+    src = SourceLyrics([SourceLine(pieces, 31.24, 31.24 + 0.3 * len(words))], timing="word")
+    s = Settings()
+    out = _rs_lines(process(src, s).lines, s)
+    assert len(out) == 2
+    assert not out[0].lower().endswith((" ne", " na", " v", " i"))
+    assert out[1].lower().startswith("ne mogu")
