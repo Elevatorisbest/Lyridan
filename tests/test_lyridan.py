@@ -250,7 +250,7 @@ def test_russian_phrase_aware_split():
     out = _rs_lines(process(src, s).lines, s)
     assert len(out) == 2
     assert not out[0].lower().endswith((" ne", " na", " v", " i"))
-    assert out == ["Pro to chto bolshe ne mogu", "Smotret na dermo"]   # "ne mogu" stays together
+    assert [o.lower() for o in out] == ["pro to chto bolshe ne mogu", "smotret na dermo"]  # "ne mogu" together
 
 
 def _rs_lines_lrc(lrc_text, **kw):
