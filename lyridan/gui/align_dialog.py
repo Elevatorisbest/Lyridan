@@ -157,6 +157,10 @@ class AlignSetupDialog(QDialog):
                                "silence plus the empty bars; for the original song it is 0.")
         self.auto.toggled.connect(lambda on: self.offset.setEnabled(not on))
         form.addRow("Known offset", self.offset)
+        self.readings = QCheckBox("Japanese: let the audio pick kanji readings (緋 → aka or hi)")
+        self.readings.setToolTip("For kanji with more than one reading, compares how well each reading matches "
+                                 "the singing. Clear wins are applied, weaker ones are only listed for you to check.")
+        form.addRow(self.readings)
         lay.addLayout(form)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.button(QDialogButtonBox.Ok).setText("Align")
@@ -225,8 +229,10 @@ def run_alignment(window) -> None:
     setup = AlignSetupDialog(window, folder, prior)
     if window.timeline.player.loaded:
         setup.path.setText(window.timeline.player.path)      # the timeline's audio is a good default
+    setup.readings.setChecked(window.settings.verify_readings)
     if not setup.exec():
         return
+    window.settings.verify_readings = setup.readings.isChecked()
     if not ensure_model(window):
         return
     store = ModelStore()

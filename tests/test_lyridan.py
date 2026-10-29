@@ -357,3 +357,31 @@ def test_english_inside_japanese_lyrics(language, mode):
     lyr = [e.lyric for e in res.entries]
     assert "stars+" in lyr and "s-" not in lyr
     assert lyr[lyr.index("Se-"):lyr.index("Se-") + 6] == ["Se-", "na-", "ka-", "a-", "wa-", "se"]
+
+
+def test_alternative_kanji_readings():
+    ja = get_japanese()
+    alts = ja.alternative_readings("緋", "ヒ")
+    assert "アカ" in alts and "ヒ" not in alts
+
+
+def test_reading_verification_helpers():
+    pytest.importorskip("numpy")
+    import numpy as np
+    from lyridan.align.aligner import AlignmentReport, ctc_score
+    from lyridan.align.readings import ReadingChange, _minor_variant
+    # voicing / gemination / vowel length variants are not real alternative readings
+    assert _minor_variant("コッ", "クロ")
+    assert _minor_variant("ケシテ", "ケッシテ")
+    assert _minor_variant("キョウガイ", "キョウカイ")
+    assert not _minor_variant("アカ", "ヒ")
+    # the scorer prefers the text that matches the frames
+    logp = np.log(np.full((6, 3), 0.01))
+    for f, k in enumerate([1, 1, 0, 2, 2, 0]):
+        logp[f, k] = np.log(0.98)
+    assert ctc_score(logp, [1, 2]) > ctc_score(logp, [2, 1])
+    rep = AlignmentReport()
+    rep.readings = [ReadingChange(0, "緋と黒", "緋", "ひ", "あか", 5.3),
+                    ReadingChange(1, "瞬き", "瞬き", "まばたき", "またたき", 3.6, applied=False)]
+    s = rep.summary()
+    assert "緋 ひ → あか" in s and "check by ear" in s and "またたき?" in s

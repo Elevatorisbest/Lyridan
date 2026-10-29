@@ -83,6 +83,8 @@ Measured on *Baby Be Mine* (plain `.lrc` + chart audio, compared to the hand-mad
 
 Results **vary from song to song**: dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder, and mistakes cluster in such passages. Treat it as a strong starting point and check everything by ear. A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
 
+**Japanese kanji readings are checked against the audio too.** Some kanji have several readings and songs often use a less common one (e.g. 緋 is normally *hi*, but in *Ghost Sequence* it is sung *aka*). While aligning, Lyridan compares every alternative reading of such kanji with the singing: a reading that wins clearly replaces the dictionary one, and close calls are only listed in the result for you to check by ear (nothing is changed for them). Turn it off with the checkbox in the alignment dialog or `--no-verify-readings`. Without audio, readings stay dictionary-based: write `{緋|あか}` in the lyrics to force a reading.
+
 The model (~340 MB) is **downloaded on first use** after you accept its licence (see [Credits and licenses](#credits-and-licenses)) and can be removed again from the Tools menu. Command line: `python -m lyridan align song.lrc song.ogg -b chart.xml --yes`.
 
 ## Language details

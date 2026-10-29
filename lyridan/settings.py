@@ -28,6 +28,7 @@ class Settings:
     language: str = "auto"                 # auto | en | ja | ru | ja_romaji
     ja: JapaneseOptions = field(default_factory=JapaneseOptions)
     use_source_romaji: bool = True         # use Apple's ja-Latn transliteration when present
+    verify_readings: bool = True           # audio alignment: let the audio pick Japanese readings
     ru_scheme: str = "practical"
     ru_syllables: str = "phonetic"         # phonetic | closed
     ru_restore_yo: bool = True

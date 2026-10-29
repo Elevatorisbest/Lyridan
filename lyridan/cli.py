@@ -111,6 +111,8 @@ def main(argv=None):
     al.add_argument("-o", "--output", help="output .ttml (default: <lyrics>_aligned.ttml)")
     al.add_argument("--audio-offset", type=float,
                     help="audio time minus lyric time in seconds (default: detect automatically)")
+    al.add_argument("--no-verify-readings", action="store_true",
+                    help="Japanese: keep dictionary kanji readings instead of checking them against the audio")
     al.add_argument("--yes", action="store_true", help="accept the model licence (CC-BY-NC 4.0) and download it")
     a = p.parse_args(argv)
     if not a.cmd:
@@ -141,6 +143,8 @@ def main(argv=None):
         from .rocksmith import compute_offset
         bm = parse_beatmap(a.beatmap) if a.beatmap else None
         prior = compute_offset(s, bm).total if (bm or not s.two_empty_bars) else None
+        if a.no_verify_readings:
+            s.verify_readings = False
         aligned, rep = align_lyrics(src, a.audio, s, store.model_path, store.meta(),
                                     lambda m, f: print(f"\r{m} {f:4.0%}", end="", file=sys.stderr) or True,
                                     offset=a.audio_offset, offset_prior=prior)

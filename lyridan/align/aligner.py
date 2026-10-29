@@ -39,6 +39,7 @@ class AlignmentReport:
     offset_detected: bool = False
     offset_note: str = ""
     timeline_shift: float = 0.0    # subtracted from audio times when saving
+    readings: list = field(default_factory=list)   # ReadingChange: readings changed by listening
     audio_kind: str = ""           # "chart" | "song" | "other"
 
     @property
@@ -51,13 +52,21 @@ class AlignmentReport:
 
     def summary(self) -> str:
         bad = [l for l in self.lines if not l.aligned]
-        s = f"Aligned {self.aligned} of {self.total} lines to the audio"
         kind = {"chart": "your chart's audio (intro silence + empty bars)", "song": "the original song",
                 "other": "an audio file with an unknown offset"}.get(self.audio_kind, "the audio")
-        s += (f". The lyrics were found {self.offset:+.2f} s into the audio"
-              f"{' (detected automatically)' if self.offset_detected else ''}, which looks like {kind}.")
+        s = (f"Aligned {self.aligned} of {self.total} lines to the audio. The lyrics were found "
+             f"{self.offset:+.2f} s into the audio{' (detected automatically)' if self.offset_detected else ''}, "
+             f"which looks like {kind}.")
         if bad:
             s += f" {len(bad)} line(s) kept estimated timing - check them by ear."
+        changed = [r for r in self.readings if r.applied]
+        suggested = [r for r in self.readings if not r.applied]
+        if changed:
+            s += " Japanese readings changed after listening: " + ", ".join(
+                f"{r.surface} {r.old} → {r.new}" for r in changed) + "."
+        if suggested:
+            s += " The audio also suggests (not changed - check by ear): " + ", ".join(
+                f"{r.surface} {r.old} → {r.new}?" for r in suggested) + "."
         return s
 
 
@@ -228,6 +237,38 @@ def ctc_align(logp: np.ndarray, tokens: Sequence[int], blank: int = 0,
     return [(a, b) for a, b in spans], float(np.mean(probs))
 
 
+def ctc_score(logp: np.ndarray, tokens: Sequence[int], blank: int = 0) -> float:
+    """Log-likelihood of the text over the *whole* window (skipped audio before and
+    after is charged like silence), so different texts for the same audio can be
+    compared fairly. Higher is better."""
+    T = logp.shape[0]
+    L = len(tokens)
+    if L == 0 or T < L:
+        return float("-inf")
+    skip = np.maximum(logp[:, blank].astype(np.float64), SKIP_FLOOR)
+    prefix = np.concatenate(([0.0], np.cumsum(skip)))
+    S = 2 * L + 1
+    lab = np.full(S, blank, dtype=np.int64)
+    lab[1::2] = tokens
+    can_skip = np.zeros(S, dtype=bool)
+    for k in range(3, S, 2):
+        can_skip[k] = lab[k] != lab[k - 2]
+    NEG = -1e30
+    dp = np.full(S, NEG)
+    best = NEG
+    for t in range(T):
+        e = logp[t, lab].astype(np.float64)
+        prev1 = np.concatenate(([NEG], dp[:-1]))
+        prev2 = np.where(can_skip, np.concatenate(([NEG, NEG], dp[:-2])), NEG)
+        val = np.maximum(np.maximum(dp, prev1), prev2)
+        val[0] = max(val[0], prefix[t])
+        val[1] = max(val[1], prefix[t])
+        dp = val + e
+        tail = prefix[T] - prefix[t + 1]           # audio after the text, charged like silence
+        best = max(best, dp[S - 1] + tail, dp[S - 2] + tail)
+    return float(best)
+
+
 # ---------------------------------------------------------------------------
 def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, model_path: str, meta: dict,
                  progress: Optional[ProgressFn] = None, audio: Optional[np.ndarray] = None,
@@ -252,9 +293,8 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
 
     s = Settings.from_json(settings.to_json())
     s.background = "exclude"
-    processed = process(source, s)
     report = AlignmentReport()
-    main_starts = [source.lines[l.index].start for l in processed.lines if not l.background]
+    main_starts = [l.start for l in source.lines if not l.background and l.start is not None]
     if offset is None:
         if progress:
             progress("Finding where the lyrics start in the audio…", 1.0)
@@ -274,6 +314,18 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
         report.audio_kind, report.timeline_shift = "other", offset
         report.offset_note = (report.offset_note + "; " if report.offset_note else "") + \
             "the audio does not match the chart's sync settings - check the offset after loading"
+    # Japanese: let the audio decide between dictionary and lyric readings (緋 hi / aka)
+    from ..pipeline import detect_language
+    if settings.verify_readings and any(detect_language(l.text) == "ja" for l in source.lines
+                                        if not l.background):
+        from .readings import verify_readings
+        source = SourceLyrics(lines=list(source.lines), language=source.language, title=source.title,
+                              artist=source.artist, lyric_offset=source.lyric_offset,
+                              leading_silence=source.leading_silence, timing=source.timing,
+                              has_romaji=source.has_romaji, path=source.path)
+        source, report.readings = verify_readings(source, em, spf, offset, s.ja, aligner.index, aligner.blank,
+                                                  progress)
+    processed = process(source, s)
     src_lines = source.lines
     out_lines: List[SourceLine] = []
     lines = [l for l in processed.lines if not l.background]

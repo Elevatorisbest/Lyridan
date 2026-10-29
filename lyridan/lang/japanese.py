@@ -215,6 +215,30 @@ class JapaneseEngine:
         return self._tagger
 
     # ------------------------------------------------------------------
+    def alternative_readings(self, surface: str, default: str) -> List[str]:
+        """Other dictionary readings MeCab considers for a word (katakana), e.g. 緋: アカ."""
+        out: List[str] = []
+        try:
+            paths = self.tagger.nbestToNodeList(surface, 30)
+        except Exception:  # noqa: BLE001
+            return out
+        for path in paths:
+            if len(path) != 1:
+                continue
+            f = path[0].feature
+            kana = getattr(f, "kana", None)
+            if not kana or kana == "*" or getattr(f, "pos2", "") == "固有名詞":
+                continue
+            kana = hira_to_kata(kana)
+            if kana != default and kana not in out:
+                out.append(kana)
+        amb = AMBIGUOUS_READINGS.get(surface, "")
+        for r in re.split(r"\s*/\s*", amb):
+            r = hira_to_kata(r.strip())
+            if r and all(is_kana(c) for c in r) and r != default and r not in out:
+                out.append(r)
+        return out
+
     def fallback_reading(self, text: str) -> str:
         """Reading for a token UniDic does not know: analyse it character by character."""
         out = []
