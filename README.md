@@ -2,9 +2,45 @@
 
 ![lyridanlogo](https://github.com/user-attachments/assets/335da193-0a28-4bf8-8848-3dcc610e3332)
 
-Lyridan turns synced lyrics (`.ttml` or `.lrc`) into a **Rocksmith 2014 vocals arrangement XML**. The output is already syllabized, romanized and snapped to your chart's beatmap, ready to import into **Editor on Fire**, **Charter** or **DLC Builder**.
+Lyridan turns synced lyrics (`.ttml` or `.lrc`) into a **Rocksmith 2014 vocals arrangement XML**.
+The output is already syllabized, romanized and snapped to your chart's beatmap, ready to import into
+**Editor on Fire**, **Charter** or **DLC Builder**.
+
+> Lyridan is a charting **assistant**, not a replacement for hand-made vocals. Always check the result
+> by ear before publishing.
 
 Version 2.0 is a full rewrite of the app.
+
+**Contents:**
+[Quick start](#quick-start) ·
+[Features](#features) ·
+[The timeline](#the-timeline) ·
+[How sync works](#how-sync-works) ·
+[Using .lrc files](#using-lrc-files) ·
+[Language details](#language-details) ·
+[Options and themes](#options-and-themes) ·
+[Installation](#installation) ·
+[Command line](#command-line) ·
+[Building from source](#building-from-source) ·
+[Credits and licenses](#credits-and-licenses)
+
+---
+
+## Quick start
+
+1. **Lyrics:** drop a `.ttml` or `.lrc` file onto the window.
+2. **Beatmap:** drop the arrangement XML of your chart (lead, rhythm or bass - it holds the synced beatmap).
+3. **Audio:** drop the audio file your chart uses, or pick it with **🎵 Audio…**. It's used for playback and the timeline.
+4. **Check:** look through the **Lyrics** tab (edit lines if needed), the **timeline** and the **Notes** tab.
+5. **Export:** click **Export Rocksmith vocals XML…** and import it in EOF / Charter / DLC Builder.
+
+Moving on to another song? **New chart…** (top right) clears the lyrics, beatmap, audio and your edits in one go.
+
+- It always asks first, and **Cancel** is the default.
+- The clear button only unlocks after a moment, so a reflex click or Enter can't wipe your work.
+- Options and conversion settings are kept.
+
+---
 
 ## Features
 
@@ -14,34 +50,91 @@ Version 2.0 is a full rewrite of the app.
 | Romanization / latinization | — | ✅ Hepburn (configurable) | ✅ 7 standards |
 | Native-script export | — | ✅ kana/kanji (JVocals) | ✅ Cyrillic |
 
-- **Inputs:** Apple Music syllable-synced TTML (raw TTML or the JSON API response), word- or line-synced TTML, plain LRC, and enhanced LRC (`<mm:ss.xx>` word tags).
-  `.lrc` files work well once aligned to the song audio; a syllable-synced `.ttml` is still the most accurate source when you can get one - see [Using .lrc files](#using-lrc-files).
-- **Uses Apple's own syllable splits.** If the TTML splits a word (`para` + `dise`), those splits are kept and timed exactly.
-- **Beat sync:** load any arrangement XML from your chart (lead, rhythm or bass). Every syllable is snapped to its beat grid (1/4 to 1/64 notes, triplets included, time-signature aware).
-- **Charting guidelines** are toggles. Lyridan applies the offset for your audio's intro silence (10 s by default) and two empty bars (measured from your beatmap), and warns if a lyric would land inside them.
-- **Rocksmith formatting:** `-` / `+` markup, first word of each line capitalized, punctuation cleanup, ASCII-safe characters for the stock font.
-- **Phrase-aware line breaks:** lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:
-  - commas and real pauses are preferred break points
-  - words that belong together are never torn apart: articles and prepositions stay with their noun, Russian "не" with its verb, Japanese particles with their word
-  - tiny fragments are avoided, e.g. "Ya / zhdu otveta" becomes "Ya zhdu otveta"
-  - a line one or two syllables over the limit is kept whole when splitting it would read worse
-- **Editing:** fix any line in the editor (`Eve-ry mo-ment / Takes me to pa-ra-dise`). Lyridan keeps the timing and `/` forces a line break.
-- **Timeline with playback and an in-game lyrics preview:** below the lyrics you see:
-  - the song's waveform
-  - your chart's measures, sections and notes
-  - the generated vocals in two rows: **Lyric lines** (each Rocksmith line as one block with its full text) and **Syllables** (one bar per syllable, joined within a word, with a mark at every line break)
-  - optionally, an existing vocals XML in the same two-row form to compare against (**File → Compare with existing vocals XML…**), e.g. when redoing a chart that already has vocals
+### Inputs
+- Apple Music **syllable-synced TTML** (raw TTML or the JSON API response) - the most accurate source.
+- Word- or line-synced TTML.
+- Plain **LRC** and enhanced LRC (`<mm:ss.xx>` word tags). These work well once aligned to the song audio, see [Using .lrc files](#using-lrc-files).
 
-  Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung, the next line waits below. It is built from the exact vocals that will be exported, so you check the final sync and line breaks before exporting.
-  - **Getting around:** an overview strip shows the whole song (sections and lyric lines); click or drag it to look at any part. **Go to section…** jumps straight to a section, **Fit** shows the whole song. In the timeline: click to move the playhead (drag to scrub), click a section to jump to it, double-click a lyric line to play it, wheel to scroll (Shift = faster), Ctrl + wheel to zoom, right/middle-drag to pan.
-  - **Keyboard** (after clicking the timeline; a coloured frame shows it is listening and **Esc** gives the keyboard back, so these keys never change settings elsewhere): ← → step the playhead (by 1/4 beat … a bar, set in Options; speeds up while held), Shift = 4× steps, Ctrl/Alt + ← → previous/next lyric line, PgUp/PgDn previous/next section, Home/End, ↑ ↓ zoom, Space play/pause, Enter play the current line, F fit. The ⌨ button lists them.
-  - **No accidental changes:** the mouse wheel over a number box, drop-down or slider in the settings scrolls the panel instead of changing the value, unless you clicked into that field first.
-  - **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
-  - **The audio:** pick the audio file your chart uses with **🎵 Audio…** or drop it on the window. Lyridan doesn't guess it (folder layouts differ too much between charters). When you load a *different* chart XML, the previous chart's audio is unloaded so you never preview against the wrong song. Saved projects remember the audio file.
-  - **Chart audio or original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
-- **Options** (the **⚙ Options** button at the top right, or Edit → Options): themes - System, Light, Dark, the original black-and-yellow **Lyridan Dark** from v1.x, **Running Red** (light: white & red), **Akai Dark** (dark with bright red), **Mechanical Red & Orange** (black, orange & red) and **Studio Console** (DAW-style graphite with a green counter). In every theme a check box that is on shows a tick on the accent colour and one that is off is an empty outlined box. Also: text sizes, playback defaults, reopening the last session, default export folder, export-disclaimer and acknowledgement reset, alignment-model management and the build information.
-- **Projects** (`.lyridan`) save the files, settings and your edits. **User dictionaries** hold your own English syllable splits and Japanese readings.
+Apple's own syllable splits are kept: if the TTML splits a word (`para` + `dise`), those splits are used and timed exactly.
+
+### Beat sync
+- Load any arrangement XML from your chart. Every syllable is snapped to its beat grid: 1/4 to 1/64 notes, triplets included, time-signature aware.
+- Charting guidelines are toggles: the offset for your audio's **intro silence** (10 s by default) and **two empty bars** (measured from your beatmap).
+- Lyridan warns if a lyric would land inside the intro silence or the empty bars.
+
+### Rocksmith formatting
+- `-` / `+` markup.
+- The first word of each line is capitalized.
+- Punctuation is cleaned up.
+- Characters are ASCII-safe for the stock font.
+
+### Phrase-aware line breaks
+Lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:
+
+- commas and real pauses are preferred break points
+- words that belong together stay together: articles and prepositions with their noun, Russian "не" with its verb, Japanese particles with their word
+- tiny fragments are avoided: "Ya / zhdu otveta" becomes "Ya zhdu otveta"
+- a line one or two syllables over the limit is kept whole when splitting it would read worse
+
+### Editing, projects and exports
+- **Edit any line** in the editor (`Eve-ry mo-ment / Takes me to pa-ra-dise`). The timing is kept and `/` forces a line break.
+- **Projects** (`.lyridan`) save the lyrics, beatmap, audio, settings and your edits.
+- **User dictionaries** hold your own English syllable splits and Japanese readings.
 - **Other exports:** syllabized text (for UltraStar Creator and similar) and romanized LRC or enhanced LRC.
+
+---
+
+## The timeline
+
+Below the lyrics you get a timeline with playback and an **in-game lyrics preview**. Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung and the next line waits below. It is built from the exact vocals that will be exported, so you can check the final sync and line breaks before exporting.
+
+The timeline rows, top to bottom:
+
+| Row | Shows |
+|---|---|
+| Bar · time | measure numbers and time |
+| Sections | coloured, named sections from your chart (Verse 1, Chorus 2…) |
+| Audio | the song's waveform |
+| Chart notes | your chart's notes, one lane per string |
+| Lyric lines | each Rocksmith line as one block with its full text |
+| Syllables | one bar per syllable, joined within a word, with a mark at every line break |
+| Reference rows | optional: an existing vocals XML to compare against (**File → Compare with existing vocals XML…**), e.g. when redoing a chart that already has vocals |
+
+### Getting around
+- **Overview strip:** the whole song at a glance. Click or drag it to view any part.
+- **Go to section…** jumps straight to a section; **Fit** shows the whole song.
+- **Mouse:**
+  - click to move the playhead (drag to scrub)
+  - click a section to jump to it
+  - double-click a lyric line to play it
+  - wheel to scroll (Shift = faster), Ctrl + wheel to zoom
+  - right/middle-drag to pan
+
+### Keyboard
+Click the timeline first. A coloured frame and a **Keys active** label show it is listening, and **Esc** hands the keyboard back, so these keys never change settings elsewhere. The ⌨ button lists them too.
+
+| Key | Action |
+|---|---|
+| ← → | step the playhead (1/4 beat … 1 bar, set in Options; speeds up while held) |
+| Shift + ← → | 4× bigger steps |
+| Ctrl/Alt + ← → | previous / next lyric line |
+| PgUp / PgDn | previous / next section |
+| Home / End | start / end of the song |
+| ↑ ↓ | zoom in / out |
+| Space · Enter | play / pause · play the current line |
+| F | fit the whole song |
+
+### Audio
+- **Pick the audio** your chart uses with **🎵 Audio…** or drop it on the window. Lyridan doesn't guess it, because folder layouts differ too much between charters.
+- **A new chart gets fresh audio:** loading a *different* chart XML unloads the previous chart's audio, so you never preview against the wrong song.
+- **Chart audio or the original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
+- **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
+
+### No accidental changes
+- The mouse wheel over a number box, drop-down or slider in the settings **scrolls the panel** instead of changing the value, unless you clicked into that field first.
+- Timeline toolbar controls never keep the keyboard, so arrow keys can't change them by accident.
+
+---
 
 ## How sync works
 
@@ -57,97 +150,141 @@ chart time = lyric time
 The total is shown at the bottom of the window. With the defaults, the bundled test song (*Baby Be Mine*) gets an offset of +14.024 s. Compared with the hand-charted vocals:
 
 - 405 of 416 syllables are identical.
-- Median timing difference is 0.000 s.
+- The median timing difference is 0.000 s.
 - 86% of syllables land within 150 ms.
 - The first lyric is on the exact same 1/16 grid point.
 
 If your chart's audio was prepared differently, turn off the toggles that don't apply and use the manual offset. The timeline shows the result against your chart notes.
 
+---
+
 ## Using .lrc files
 
-A normal `.lrc` file only says when each **line** starts, so on its own Lyridan can only estimate the syllable timing inside a line (on the test song only 3% of syllables landed within a 1/16 note of the hand-made chart). **Aligning it to the song audio fixes most of that** (84%, see below). A syllable-synced `.ttml` (e.g. from Apple Music) is still the most accurate source (93%), so use one when it exists for your song. When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to song audio…** button.
+A normal `.lrc` file only says when each **line** starts. On its own, Lyridan can only estimate the syllable timing inside a line. **Aligning it to the song audio fixes most of that.** A syllable-synced `.ttml` (e.g. from Apple Music) is still the most accurate source, so use one when it exists for your song.
 
-### Align an .lrc to the song audio
+Measured on *Baby Be Mine* against the hand-made Rocksmith chart:
 
-**Tools → Align lyrics to song audio…** (or the button in the note) turns an `.lrc` into a syllable-synced `.ttml`:
-
-1. Choose the song audio - your chart's audio or the original song - and, optionally but recommended, an isolated **vocal stem** of that same audio (UVR5, Demucs…). Lyridan listens to the stem while the timeline keeps playing the full song.
-2. Lyridan finds where the lyrics start in that audio (it recognises a chart's intro silence + empty bars automatically), then uses Meta's multilingual **MMS forced-alignment** speech model (run locally through ONNX Runtime) to find where every syllable is actually sung, using the `.lrc` line timestamps as anchors. Parenthesised backing-vocal parts of `.lrc` lines become background lines.
-3. The result is saved as a normal syllable-synced `.ttml` you can keep, fix and reuse.
-
-Measured on *Baby Be Mine* (plain `.lrc` + chart audio, compared to the hand-made Rocksmith chart):
-
-| input | same 1/16 grid point | within a 1/16 note | median difference |
+| Input | Same 1/16 grid point | Within a 1/16 note | Median difference |
 |---|---|---|---|
 | Apple syllable `.ttml` | 175 / 405 | 93% | 68 ms |
 | plain `.lrc`, estimated | 3 / 405 | 3% | 818 ms |
 | plain `.lrc` + audio alignment | 230 / 405 | 84% | 1 ms |
 
-Results **vary from song to song**: dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder, and mistakes cluster in such passages. Treat it as a strong starting point and check everything by ear. Lines whose words the model can barely make out (vocals buried under instruments or effects) are listed as **hard to hear**; they lean on their `.lrc` timestamps instead of being squeezed into the wrong place, but check them first. A vocal stem helps most exactly there: on *Ghost Sequence* the full mix gives almost no usable signal for "Just breathe beside me in this fractured night", while a UVR5 stem places it correctly, and on *Baby Be Mine* a stem cut the syllables that were off by more than half a second from 45 to 29 (of 419). A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
+### Align an .lrc to the song audio
+When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to song audio…** button (also in **Tools**):
 
-**Japanese kanji readings are checked against the audio too.** Some kanji have several readings and songs often use a less common one (e.g. 緋 is normally *hi*, but in *Ghost Sequence* it is sung *aka*). While aligning, Lyridan compares every alternative reading of such kanji with the singing: a reading that wins clearly replaces the dictionary one, and close calls are only listed in the result for you to check by ear (nothing is changed for them). Turn it off with the checkbox in the alignment dialog or `--no-verify-readings`. Without audio, readings stay dictionary-based: write `{緋|あか}` in the lyrics to force a reading.
+1. **Choose the song audio:** your chart's audio or the original song. Optionally, but recommended, add an isolated **vocal stem** of that same audio (UVR5, Demucs…). Lyridan listens to the stem while the timeline keeps playing the full song.
+2. **Lyridan listens:** it finds where the lyrics start (it recognises a chart's intro silence + empty bars automatically). Then Meta's multilingual **MMS forced-alignment** speech model, run locally, finds where every syllable is sung, with the `.lrc` line timestamps as anchors. Parenthesised backing vocals become background lines.
+3. **Keep the result:** it is saved as a normal syllable-synced `.ttml` you can keep, fix and reuse.
 
-The model (~340 MB) is **downloaded on first use** after you accept its licence (see [Credits and licenses](#credits-and-licenses)) and can be removed again from the Tools menu. Command line: `python -m lyridan align song.lrc song.ogg -b chart.xml --yes`.
+**What to expect:**
+- Results vary from song to song. Dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder.
+- Lines the model can barely hear are listed as **hard to hear**. They lean on their `.lrc` timestamps instead of being squeezed into the wrong place - check them first.
+- **A vocal stem helps most exactly there.** On *Ghost Sequence* the full mix gives almost no usable signal for "Just breathe beside me in this fractured night", while a UVR5 stem places it correctly. On *Baby Be Mine* a stem cut the syllables off by more than half a second from 45 to 29 (of 419).
+- A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
+
+**Japanese kanji readings are checked against the audio too.** Some kanji have several readings, and songs often use a less common one (緋 is normally *hi*, but in *Ghost Sequence* it is sung *aka*).
+- A reading that clearly wins replaces the dictionary one.
+- Close calls are only listed for you to check by ear.
+- Turn it off in the alignment dialog or with `--no-verify-readings`.
+- Without audio, readings stay dictionary-based. Write `{緋|あか}` in the lyrics to force a reading.
+
+**The model** (~340 MB) is **downloaded on first use** after you accept its licence (see [Credits and licenses](#credits-and-licenses)). It can be removed again from the Tools menu.
+
+---
 
 ## Language details
 
 ### English
-1. Your own dictionary.
-2. Built-in lyric words (gonna, c'mon, everybody…).
-3. A curated 47,700-word karaoke-style syllable dictionary (*li-ving, ma-gic, eve-ry, dif-fe-rent*).
-4. For any other word, a boundary model trained on that dictionary, guided by syllable counts from the CMU Pronouncing Dictionary. It splits about 95% of unseen dictionary words exactly like the dictionary would.
+Syllables come from, in order:
+1. your own dictionary
+2. built-in lyric words (gonna, c'mon, everybody…)
+3. a curated 47,700-word karaoke-style syllable dictionary (*li-ving, ma-gic, eve-ry, dif-fe-rent*)
+4. for any other word, a boundary model trained on that dictionary and guided by CMU Pronouncing Dictionary syllable counts (it splits about 95% of unseen words exactly like the dictionary would)
 
 Contractions, possessives, elongated words (*ooooh*) and hyphenated words are handled.
 
 ### Japanese
-- **Readings** come from MeCab (fugashi) with UniDic, so they depend on context.
-- **Lyric corrections:** 私→watashi, 明日→ashita, 貴女→anata, 抱く→daku (or *idaku* after 夢を), 何を→nani o, 何時まで→itsu made…
-- **Reading review:** words that songs often read differently (宇宙 *sora*, 永遠 *towa*, 運命 *sadame*, 刃 *yaiba*…) are listed in the Notes column for you to check.
-- **Furigana in the lyric file wins:** `宇宙(そら)`, `宇宙（そら）`, `{宇宙|そら}`, `|宇宙《そら》`. A reading dictionary in the app does the same for every song.
-- **Romanization is modified Hepburn.** は/へ/を are spelled as pronounced, including inside words (こんにちは → *konnichiwa*). っ doubles the consonant, *tch* before *ch*.
-- **Romanization options:**
-  - long vowels: as written (*tou*), macrons (*tō*) or simplified (*to*)
-  - を: *o* or *wo*
-  - *n'* before vowels
-  - katakana loanwords spelled in English (ラブ → *love*)
-- **Grouping:** verbs keep their endings (*dakishimetai, utatte, aitakute*), particles stay separate (*kimi no*, *boku wa*), and English words inside Japanese lines stay English.
-- **Syllable modes:** every mora, mora with ん/っ joined (default: *kon-ni-chi-wa*), or syllables with long vowels joined (*tou-kyou*).
-- **Apple romaji:** if the TTML includes Apple's own romaji (`ja-Latn` transliteration), Lyridan can use it directly.
-- **Native-script export:** every romaji syllable keeps a link to its kana/kanji, so a Japanese vocals XML (for a custom font in DLC Builder) can be exported with the same timing.
+**Readings**
+- Readings come from MeCab (fugashi) with UniDic, so they depend on context.
+- **Lyric corrections:** 私→watashi, 明日→ashita, 貴女→anata, 抱く→daku (or *idaku* after 夢を), 何を→nani o…
+- **Reading review:** words songs often read differently (宇宙 *sora*, 永遠 *towa*, 運命 *sadame*, 刃 *yaiba*…) are listed in the Notes column.
+- **Furigana in the lyric file wins:** `宇宙(そら)`, `宇宙（そら）`, `{宇宙|そら}`, `|宇宙《そら》`. The reading dictionary in the app does the same for every song.
+
+**Romanization** (modified Hepburn)
+- は/へ/を are spelled as pronounced, also inside words (こんにちは → *konnichiwa*).
+- っ doubles the consonant; *tch* before *ch*.
+- Options: long vowels as written (*tou*), macrons (*tō*) or simplified (*to*) · を as *o* or *wo* · *n'* before vowels · katakana loanwords in English (ラブ → *love*).
+- If the TTML includes Apple's own romaji (`ja-Latn`), Lyridan can use it directly.
+
+**Syllables and words**
+- Verbs keep their endings (*dakishimetai, utatte*), particles stay separate (*kimi no*), English words stay English.
+- Modes: every mora, mora with ん/っ joined (default: *kon-ni-chi-wa*), or syllables with long vowels joined (*tou-kyou*).
+- **Native-script export:** every romaji syllable remembers its kana/kanji, so a Japanese vocals XML (for a custom font in DLC Builder) can be exported with the same timing.
 
 ### Russian
-- **ё restoration** (еще → ещё, идет → идёт). It uses a 120,000-word-form list built from OpenCorpora and only restores ё where the spelling is unambiguous.
-- **Syllables:** phonetic and open (*ко-шка, се-стра, кар-та, сол-нце, ван-на*) or closed (*кош-ка*).
-- **Latinization standards:** Practical (Wikipedia/English), BGN/PCGN, GOST 7.79-B, ISO 9, ICAO (passports), ALA-LC and Scholarly. Context rules (*ye* after vowels, *-sky* endings…) are applied per word, then split by syllable.
+- **ё restoration** (еще → ещё, идет → идёт), from a 120,000-word-form list built from OpenCorpora; only where the spelling is unambiguous.
+- **Syllables:** phonetic and open (*ко-шка, се-стра, кар-та, сол-нце*) or closed (*кош-ка*).
+- **Latinization:** Practical (Wikipedia/English), BGN/PCGN, GOST 7.79-B, ISO 9, ICAO (passports), ALA-LC and Scholarly. Context rules (*ye* after vowels, *-sky* endings…) are applied per word, then split by syllable.
+
+---
+
+## Options and themes
+
+Open them with the **⚙ Options** button at the top right (or Edit → Options):
+
+- **Themes and text sizes**
+- **Playback defaults** and the **timeline arrow-key step**
+- **Reopening the last session** and the **default export folder**
+- **Notices:** the export disclaimer and resetting dismissed notices
+- **Alignment model management** and **About this build**
+
+| Theme | Style |
+|---|---|
+| System | follows your operating system |
+| Light · Dark | neutral light and dark |
+| Lyridan Dark | the original black & yellow from v1.x |
+| Running Red | light: white with bold red |
+| Akai Dark | dark with bright red accents, near-white text |
+| Mechanical Red & Orange | black, signal orange and red |
+| Digital Studio | dark DAW edit window: graphite panels, blue highlights, salmon clips, green-on-black counter |
+| Digital Studio Light | classic light DAW edit window: cool grey, light-blue clips, navy waveforms, lime counter |
+| Studio Console | charcoal console strip: cream legends, light-grey caps, orange meters, green LEDs |
+| Studio Console Light | silver-blue console strip: pale panels, teal and blue knobs, blue LED counter |
+
+In every theme a check box that is **on** shows a tick on the accent colour, and one that is **off** is an empty outlined box.
+
+---
 
 ## Installation
 
 ### Windows
 Download `Lyridan-<version>-Windows-x64-Setup.exe` from Releases and run it. A portable `.zip` is also provided.
-*SmartScreen may warn because the app isn't code-signed. Choose "More info → Run anyway".*
+
+> SmartScreen may warn because the app isn't code-signed. Choose **More info → Run anyway**.
 
 ### macOS (Apple Silicon and Intel)
 Download the DMG for your Mac (`AppleSilicon` or `Intel`), open it and drag Lyridan to Applications.
-The app isn't notarized. If macOS says it's damaged or from an unidentified developer, run:
-```bash
-xattr -cr /Applications/Lyridan.app
-```
 
-## Using it
+> The app isn't notarized. If macOS says it's damaged or from an unidentified developer, run:
+> ```bash
+> xattr -cr /Applications/Lyridan.app
+> ```
 
-1. Drop a `.ttml` / `.lrc` file onto the window.
-2. Drop the arrangement XML of the chart you're working on (it has the synced beatmap) and the chart's audio file (for playback and the timeline).
-3. Check the **Lyrics** tab (edit lines if needed), the **Timeline** and the **Notes** tab.
-4. Click **Export Rocksmith vocals XML…** and import it in EOF / Charter / DLC Builder.
-5. Moving on to another song? **New chart…** (top right) clears the lyrics, beatmap, audio and your edits in one go. It asks first, Cancel is the default and the clear button only unlocks after a moment, so a reflex click or Enter can't wipe your work. Options and conversion settings are kept.
+---
 
-Command line (also works with the installed app):
+## Command line
+
+Works with the installed app too:
+
 ```bash
 python -m lyridan convert song.ttml -b "2_Bass_RS2.xml" -o "1_Vocals_RS2.xml" [--native-output JVocals.xml]
-python -m lyridan text song.lrc          # print syllabized / romanized lyrics
-python -m lyridan align song.lrc song.ogg -b chart.xml --yes   # .lrc -> syllable .ttml using the audio
-python -m lyridan convert --help         # all options
+python -m lyridan text song.lrc                               # print syllabized / romanized lyrics
+python -m lyridan align song.lrc song.ogg -b chart.xml --yes  # .lrc -> syllable .ttml using the audio
+python -m lyridan convert --help                              # all options
 ```
+
+---
 
 ## Building from source
 
@@ -161,20 +298,26 @@ python Lyridan.py            # run the app
 
 - **Windows installer:** `build_windows.bat` (needs Inno Setup 6 for the installer step).
 - **macOS app + DMG:** `bash build_macos.sh` (builds for the architecture of the Mac it runs on).
-- **CI** (`.github/workflows/build.yml`): every push runs the tests, then builds:
-  - Windows: installer + portable zip
-  - macOS Apple Silicon (`macos-15`) and Intel (`macos-15-intel`): `.pkg` installer + `.dmg`
 
-  Each frozen app is smoke-tested before packaging.
+### CI and release channels
+Every push runs the tests, then `.github/workflows/build.yml` builds:
+- **Windows:** installer + portable zip
+- **macOS Apple Silicon** (`macos-15`) and **Intel** (`macos-15-intel`): `.pkg` installer + `.dmg`
+
+Each frozen app is smoke-tested before packaging.
 
 | Push to | Channel | Version shown | Published as |
 |---|---|---|---|
-| `dev` (or any other branch) | dev | `2.0.0-dev.<run> (<commit>)` with full build info in **Settings → Build information** (branch, commit, message, build number, build machine, workflow run link, runtime library versions, "Copy build info" button) and a DEV badge | rolling pre-release **dev-latest** + workflow artifacts |
-| `main` | stable | `2.0.0` only | GitHub release **v2.0.0** (re-uploaded if `VERSION` wasn't bumped) |
-| tag `v*` | stable | `2.0.0` only | release for that tag |
+| `dev` (or any other branch) | dev | `2.0.0-dev.<run> (<commit>)` + DEV badge | rolling pre-release **dev-latest** + workflow artifacts |
+| `main` | stable | `2.0.0` | GitHub release **v2.0.0** |
+| tag `v*` | stable | `2.0.0` | release for that tag |
 
-Bump `VERSION` in `lyridan/__init__.py` before merging to `main` to get a new release. Local builds are dev builds unless you pass `--channel stable` (`build_windows.bat --channel stable`, `bash build_macos.sh --channel stable`). `python -m lyridan --version` prints the same build info.
+- **Dev builds** show full build info in **Options → About this build**: branch, commit, message, build number, build machine, workflow run link and library versions, with a "Copy build info" button.
+- **New release:** bump `VERSION` in `lyridan/__init__.py` before merging to `main`. If `VERSION` wasn't bumped, the files of the existing release are re-uploaded.
+- **Local builds** are dev builds unless you pass `--channel stable`.
+- `python -m lyridan --version` prints the same build info.
 
+### Language data
 The bundled language data can be rebuilt with the scripts in `tools/`:
 
 | Script | Rebuilds |
@@ -182,13 +325,14 @@ The bundled language data can be rebuilt with the scripts in `tools/`:
 | `train_english_model.py --eval` | English boundary model |
 | `build_cmu_counts.py` | CMU syllable counts |
 | `build_yo_dict.py` | ё dictionary |
-| `compare_reference.py -v` | Compares output with the reference chart |
+| `compare_reference.py -v` | compares output with the reference chart |
 
 ### Project layout
 ```
 lyridan/
   parsers/   ttml.py, lrc.py, rsxml.py     input files, beatmap, vocals XML
   lang/      english.py, japanese.py, kana.py, russian.py, hyphen_model.py
+  align/     audio alignment (MMS model, readings check)
   pipeline.py    language processing + timing of every syllable
   rocksmith.py   offsets, grid snapping, line breaking, Rocksmith markup
   gui/           PySide6 interface
@@ -197,8 +341,11 @@ packaging/   PyInstaller spec, Inno Setup script, DMG script
 tests/       regression tests + reference song files
 ```
 
+---
+
 ## Credits and licenses
-Lyridan is GPL-2.0. It uses:
+
+Lyridan is **GPL-2.0**. It uses:
 
 - PySide6 / Qt (LGPL)
 - fugashi (MIT) and MeCab (BSD)
@@ -207,12 +354,13 @@ Lyridan is GPL-2.0. It uses:
 - ONNX Runtime (MIT), NumPy (BSD), soundfile / libsndfile (BSD / LGPL), python-soxr (LGPL), certifi (MPL-2.0)
 - OpenCorpora data via pymorphy3 (CC BY-SA, ё list)
 
-The optional alignment model is **not** part of Lyridan's code or installers. It is downloaded separately on first use:
+### Alignment model
+The optional alignment model is **not** part of Lyridan's code or installers. It is downloaded separately on first use.
 
 - **Model:** the MMS forced aligner by Meta AI (V. Pratap et al., [*Scaling Speech Technology to 1,000+ Languages*](https://arxiv.org/abs/2305.13516), 2023), distributed through [torchaudio](https://docs.pytorch.org/audio/main/generated/torchaudio.pipelines.MMS_FA.html).
 - **Licence:** [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), **non-commercial use only**. That fits Lyridan, a free charting tool; it must not be used commercially.
-- **Changes:** the Lyridan project exported it to ONNX and quantized it to 8-bit (`tools/export_alignment_model.py`).
-- **Hosting:** the converted files are published, with this attribution, as the `alignment-model-v1` release by `.github/workflows/alignment-model.yml`.
-- **Your code's licence:** the model's licence covers the model files only. Lyridan's source code stays GPL-2.0.
+- **Changes:** exported to ONNX and quantized to 8-bit by the Lyridan project (`tools/export_alignment_model.py`).
+- **Hosting:** published with this attribution as the `alignment-model-v1` release by `.github/workflows/alignment-model.yml`.
+- **Scope:** the model's licence covers the model files only. Lyridan's source code stays GPL-2.0.
 
 Made by Elevatorisbest.

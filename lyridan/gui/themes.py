@@ -61,13 +61,43 @@ THEMES = {
         "accent": "#ff6a13", "group_title": "#ff7a1f", "wave": "#ff9b54", "clock_bg": "#000000",
         "clock_fg": "#ff7a1f", "playhead": "#ffe14d",
     },
-    # graphite studio console: grey panels, light-blue selection, green-on-black counter
+    # DAW edit window, dark: graphite panels, blue tool highlights, salmon clips, green-on-black counter
+    "digital_studio": {
+        "name": "Digital Studio", "bg": "#36383c", "fg": "#d9dbde", "text_bg": "#26272a", "text_fg": "#e6e7e9",
+        "entry_bg": "#45484d", "entry_fg": "#f0f1f3", "btn_bg": "#4c4f55", "btn_fg": "#ffffff",
+        "btn_active_bg": "#3f86d4", "frame_bg": "#2e3033", "highlight": "#4a95e3", "select_bg": "#2f5f92",
+        "select_fg": "#ffffff", "border": "#1f2023", "muted": "#9a9da3", "accent": "#4a9be8",
+        "group_title": "#a9cdf2", "vocals": "#e2736c", "wave": "#e9a39d", "clock_bg": "#000000",
+        "clock_fg": "#3fe06a", "playhead": "#7fd8ff", "check_border": "#8d9097",
+    },
+    # DAW edit window, classic light: cool grey panels, light-blue clips with navy waveforms, lime counter
+    "digital_studio_light": {
+        "name": "Digital Studio Light", "bg": "#c4c8cd", "fg": "#141619", "text_bg": "#e8ebee",
+        "text_fg": "#121417", "entry_bg": "#f7f8f9", "entry_fg": "#121417", "btn_bg": "#4a72a8",
+        "btn_fg": "#ffffff", "btn_active_bg": "#3a6297", "frame_bg": "#d5d9dd", "highlight": "#2f6fd0",
+        "select_bg": "#a8c9ee", "select_fg": "#000000", "border": "#8e959d", "muted": "#545a62",
+        "accent": "#2f6fd0", "group_title": "#244b80", "vocals": "#3f73b8", "wave": "#2c4d78",
+        "clock_bg": "#121a10", "clock_fg": "#b6ff5c", "playhead": "#0b1f4d",
+    },
+    # classic British large-format console strip: charcoal panel, cream legends, light-grey caps,
+    # red / green / blue knobs, orange meters and green LEDs
     "studio_console": {
-        "name": "Studio Console", "bg": "#2b2d31", "fg": "#d9dce1", "text_bg": "#1f2124", "text_fg": "#e2e4e8",
-        "entry_bg": "#3a3d43", "entry_fg": "#eceef1", "btn_bg": "#4a4f57", "btn_fg": "#ffffff",
-        "btn_active_bg": "#5b616b", "frame_bg": "#33363b", "highlight": "#4aa3e8", "select_bg": "#2e5f8a",
-        "select_fg": "#ffffff", "border": "#4b4f56", "muted": "#9aa0a8", "accent": "#5cb8ff",
-        "group_title": "#9fd3ff", "wave": "#8fc1ea", "clock_bg": "#050807", "clock_fg": "#5dff8f",
+        "name": "Studio Console", "bg": "#232427", "fg": "#efeadf", "text_bg": "#1b1c1e", "text_fg": "#f2eee6",
+        "entry_bg": "#34363a", "entry_fg": "#f4f0e8", "btn_bg": "#d8d8d4", "btn_fg": "#121212",
+        "btn_active_bg": "#f0f0ec", "frame_bg": "#2b2c30", "highlight": "#2f74c0", "select_bg": "#3b5f86",
+        "select_fg": "#ffffff", "border": "#46484d", "muted": "#a29e95", "accent": "#3fcf5c",
+        "group_title": "#f4efe2", "vocals": "#ff7a1a", "wave": "#cfcabe", "clock_bg": "#0b0b0c",
+        "clock_fg": "#ffffff", "playhead": "#e2473a", "check_border": "#8f8b83", "toggle_on": "#c8322a",
+    },
+    # its light counterpart, after a silver-blue console strip: pale panels, teal and blue knobs,
+    # a red makeup knob and blue LED meters on navy
+    "studio_console_light": {
+        "name": "Studio Console Light", "bg": "#bfc6ca", "fg": "#25292c", "text_bg": "#eef1f2",
+        "text_fg": "#1c1f22", "entry_bg": "#ffffff", "entry_fg": "#1c1f22", "btn_bg": "#1f7f86",
+        "btn_fg": "#ffffff", "btn_active_bg": "#17666c", "frame_bg": "#dfe4e6", "highlight": "#1f8a8f",
+        "select_bg": "#a9d0db", "select_fg": "#000000", "border": "#97a2a7", "muted": "#59636a",
+        "accent": "#1f8a8f", "group_title": "#1c6a70", "vocals": "#2d62b4", "wave": "#2d5fb0",
+        "clock_bg": "#0b1430", "clock_fg": "#5bb8ff", "playhead": "#d8392f",
     },
 }
 THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "Light"), ("dark", "Dark"),
@@ -75,7 +105,10 @@ THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "
                  ("running_red", "Running Red (light: white & red)"),
                  ("akai_dark", "Akai Dark (dark: bright red)"),
                  ("mech_red_orange", "Mechanical Red & Orange (dark: black, orange & red)"),
-                 ("studio_console", "Studio Console (dark: DAW grey, green counter)")]
+                 ("digital_studio", "Digital Studio (dark: DAW edit window, green counter)"),
+                 ("digital_studio_light", "Digital Studio Light (light: classic DAW edit window)"),
+                 ("studio_console", "Studio Console (dark: charcoal console strip)"),
+                 ("studio_console_light", "Studio Console Light (light: silver-blue console strip)")]
 
 _default_palette = None
 _default_font = None
@@ -89,7 +122,7 @@ def current_colors(theme: str) -> dict:
     dark = pal.window().color().lightness() < 128
     base = dict(THEMES["dark" if dark else "light"])
     base["accent"] = pal.highlight().color().name()
-    for k in ("wave", "clock_bg", "clock_fg", "group_title", "playhead"):
+    for k in ("wave", "clock_bg", "clock_fg", "group_title", "playhead", "vocals", "check_border"):
         base.pop(k, None)
     return base
 
@@ -169,6 +202,7 @@ def apply_theme(app: QApplication, theme: str, font_pt: int = 0) -> None:
 def _stylesheet(c: dict, theme: str) -> str:
     on, off, ondis = _indicator_images(c)
     gt = c.get("group_title", c["fg"])
+    on_bg = c.get("toggle_on", c["highlight"])    # toggle buttons (Follow, Metronome) when switched on
     return f"""
 QWidget {{ color: {c['fg']}; }}
 QMainWindow, QDialog {{ background: {c['bg']}; }}
@@ -189,7 +223,7 @@ QPushButton:default {{ font-weight: bold; }}
 QToolButton {{ background: {c['frame_bg']}; color: {c['fg']}; border: 1px solid {c['border']};
     border-radius: 4px; padding: 3px 7px; }}
 QToolButton:hover {{ background: {c['select_bg']}; }}
-QToolButton:checked {{ background: {c['btn_bg']}; color: {c['btn_fg']}; }}
+QToolButton:checked {{ background: {on_bg}; color: {_contrast(on_bg)}; border-color: {on_bg}; font-weight: bold; }}
 QTableWidget, QListWidget, QTreeView {{ background: {c['text_bg']}; color: {c['text_fg']};
     gridline-color: {c['border'] if theme != 'lyridan_dark' else '#333333'}; border: 1px solid {c['border']};
     selection-background-color: {c['select_bg']}; selection-color: {c['select_fg']}; }}
