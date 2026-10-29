@@ -147,7 +147,7 @@ chart time = lyric time
            + manual offset (ms)
 ```
 
-The total is shown at the bottom of the window. With the defaults, the bundled test song (*Baby Be Mine*) gets an offset of +14.024 s. Compared with the hand-charted vocals:
+The total is shown at the bottom of the window. As an example, we checked this on *Baby Be Mine* against a hand-made vocal track from our own Rocksmith chart of the song. With the defaults it got an offset of +14.024 s, and compared with the hand-made vocals:
 
 - 405 of 416 syllables are identical.
 - The median timing difference is 0.000 s.
@@ -162,7 +162,7 @@ If your chart's audio was prepared differently, turn off the toggles that don't 
 
 A normal `.lrc` file only says when each **line** starts. On its own, Lyridan can only estimate the syllable timing inside a line. **Aligning it to the song audio fixes most of that.** A syllable-synced `.ttml` (e.g. from Apple Music) is still the most accurate source, so use one when it exists for your song.
 
-Measured on *Baby Be Mine* against the hand-made Rocksmith chart:
+How this looked when we tried it on *Baby Be Mine*, compared with the hand-made vocal track of our own chart:
 
 | Input | Same 1/16 grid point | Within a 1/16 note | Median difference |
 |---|---|---|---|
@@ -180,10 +180,10 @@ When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to s
 **What to expect:**
 - Results vary from song to song. Dense backing vocals, heavy effects, very fast or very long notes and overlapping singers are harder.
 - Lines the model can barely hear are listed as **hard to hear**. They lean on their `.lrc` timestamps instead of being squeezed into the wrong place - check them first.
-- **A vocal stem helps most exactly there.** On *Ghost Sequence* the full mix gives almost no usable signal for "Just breathe beside me in this fractured night", while a UVR5 stem places it correctly. On *Baby Be Mine* a stem cut the syllables off by more than half a second from 45 to 29 (of 419).
+- **A vocal stem helps most exactly there.** In our tests on *Ghost Sequence*, the full mix gave almost no usable signal for one heavily layered English line, while a UVR5 stem placed it correctly. On *Baby Be Mine*, a stem cut the syllables that were off by more than half a second from 45 to 29 (of 419).
 - A full song takes about 30-60 s on a modern CPU and ~1.5 GB of RAM.
 
-**Japanese kanji readings are checked against the audio too.** Some kanji have several readings, and songs often use a less common one (緋 is normally *hi*, but in *Ghost Sequence* it is sung *aka*).
+**Japanese kanji readings are checked against the audio too.** Some kanji have several readings, and songs often use a less common one (緋 is normally read *hi*, but some songs sing it *aka*).
 - A reading that clearly wins replaces the dictionary one.
 - Close calls are only listed for you to check by ear.
 - Turn it off in the alignment dialog or with `--no-verify-readings`.
@@ -239,18 +239,66 @@ Open them with the **⚙ Options** button at the top right (or Edit → Options)
 - **Notices:** the export disclaimer and resetting dismissed notices
 - **Alignment model management** and **About this build**
 
-| Theme | Style |
+| Theme | Look |
 |---|---|
 | System | follows your operating system |
-| Light · Dark | neutral light and dark |
-| Lyridan Dark | the original black & yellow from v1.x |
-| Running Red | light: white with bold red |
-| Akai Dark | dark with bright red accents, near-white text |
-| Mechanical Red & Orange | black, signal orange and red |
-| Digital Studio | dark DAW edit window: graphite panels, blue highlights, salmon clips, green-on-black counter |
-| Digital Studio Light | classic light DAW edit window: cool grey, light-blue clips, navy waveforms, lime counter |
-| Studio Console | charcoal console strip: cream legends, light-grey caps, orange meters, green LEDs |
-| Studio Console Light | silver-blue console strip: pale panels, teal and blue knobs, blue LED counter |
+| Light | neutral light |
+| Dark | neutral dark |
+| Lyridan Dark | black and yellow, the original look from v1.x |
+| Running Red | light, white and red |
+| Akai Dark | dark with red accents |
+| Mechanical Red & Orange | dark, black with orange and red |
+| Digital Studio | dark, inspired by a DAW edit window |
+| Digital Studio Light | light, inspired by a classic DAW edit window |
+| Studio Console | dark, inspired by an analogue mixing console strip |
+| Studio Console Light | light, inspired by a lighter analogue console strip |
+
+<details>
+<summary><b>Theme screenshots</b> (click to expand)</summary>
+
+*The screenshots use made-up demo lyrics.*
+
+**Light**
+
+![Light theme](docs/screenshots/theme_light.png)
+
+**Dark**
+
+![Dark theme](docs/screenshots/theme_dark.png)
+
+**Lyridan Dark**
+
+![Lyridan Dark theme](docs/screenshots/theme_lyridan_dark.png)
+
+**Running Red**
+
+![Running Red theme](docs/screenshots/theme_running_red.png)
+
+**Akai Dark**
+
+![Akai Dark theme](docs/screenshots/theme_akai_dark.png)
+
+**Mechanical Red & Orange**
+
+![Mechanical Red & Orange theme](docs/screenshots/theme_mech_red_orange.png)
+
+**Digital Studio**
+
+![Digital Studio theme](docs/screenshots/theme_digital_studio.png)
+
+**Digital Studio Light**
+
+![Digital Studio Light theme](docs/screenshots/theme_digital_studio_light.png)
+
+**Studio Console**
+
+![Studio Console theme](docs/screenshots/theme_studio_console.png)
+
+**Studio Console Light**
+
+![Studio Console Light theme](docs/screenshots/theme_studio_console_light.png)
+
+</details>
 
 In every theme a check box that is **on** shows a tick on the accent colour, and one that is **off** is an empty outlined box.
 
@@ -325,7 +373,7 @@ The bundled language data can be rebuilt with the scripts in `tools/`:
 | `train_english_model.py --eval` | English boundary model |
 | `build_cmu_counts.py` | CMU syllable counts |
 | `build_yo_dict.py` | ё dictionary |
-| `compare_reference.py -v` | compares output with the reference chart |
+| `compare_reference.py -v` | compares output with a hand-made vocal track (test files) |
 
 ### Project layout
 ```
@@ -338,7 +386,7 @@ lyridan/
   gui/           PySide6 interface
   data/          dictionaries and models
 packaging/   PyInstaller spec, Inno Setup script, DMG script
-tests/       regression tests + reference song files
+tests/       regression tests and the files they use
 ```
 
 ---
