@@ -61,23 +61,30 @@ THEMES = {
         "accent": "#ff6a13", "group_title": "#ff7a1f", "wave": "#ff9b54", "clock_bg": "#000000",
         "clock_fg": "#ff7a1f", "playhead": "#ffe14d",
     },
-    # DAW edit window, dark: graphite panels, blue tool highlights, salmon clips, green-on-black counter
+    # DAW edit window, dark: neutral graphite panels, stacked rulers, track name plates, clips with
+    # name bars, blue toggles and a large light-on-black counter ("style": "daw" adds the extra look)
     "digital_studio": {
-        "name": "Digital Studio", "bg": "#36383c", "fg": "#d9dbde", "text_bg": "#26272a", "text_fg": "#e6e7e9",
-        "entry_bg": "#45484d", "entry_fg": "#f0f1f3", "btn_bg": "#4c4f55", "btn_fg": "#ffffff",
-        "btn_active_bg": "#3f86d4", "frame_bg": "#2e3033", "highlight": "#4a95e3", "select_bg": "#2f5f92",
-        "select_fg": "#ffffff", "border": "#1f2023", "muted": "#9a9da3", "accent": "#4a9be8",
-        "group_title": "#a9cdf2", "vocals": "#e2736c", "wave": "#e9a39d", "clock_bg": "#000000",
-        "clock_fg": "#3fe06a", "playhead": "#7fd8ff", "check_border": "#8d9097",
+        "name": "Digital Studio", "style": "daw", "bg": "#2c2d30", "fg": "#d4d6da", "text_bg": "#1d1e21",
+        "text_fg": "#e3e5e8", "entry_bg": "#18191b", "entry_fg": "#eceef1", "btn_bg": "#45474c",
+        "btn_fg": "#eef0f3", "btn_active_bg": "#54575d", "frame_bg": "#252629", "highlight": "#3b82d6",
+        "select_bg": "#2d5b8f", "select_fg": "#ffffff", "border": "#0f1012", "muted": "#8f9298",
+        "accent": "#4b97e6", "group_title": "#b9bcc2", "vocals": "#e2736c", "wave": "#e2736c",
+        "clock_bg": "#0b0c0d", "clock_fg": "#d6e6f7", "playhead": "#8fd3ff", "check_border": "#7d8087",
+        "ruler_bg": "#323438", "ruler_fg": "#aeb2b8", "header_bg": "#38393d", "header_hi": "#45474c",
+        "lane_line": "#0c0d0e", "grid_bar": "#49505a", "grid_beat": "#2b2e33", "marker": "#e9c349",
+        "toolbar_top": "#3b3d41", "toolbar_bot": "#2e3033", "clip_text": "#101114", "notes_clip": "#5a8fd0",
     },
     # DAW edit window, classic light: cool grey panels, light-blue clips with navy waveforms, lime counter
     "digital_studio_light": {
-        "name": "Digital Studio Light", "bg": "#c4c8cd", "fg": "#141619", "text_bg": "#e8ebee",
-        "text_fg": "#121417", "entry_bg": "#f7f8f9", "entry_fg": "#121417", "btn_bg": "#4a72a8",
-        "btn_fg": "#ffffff", "btn_active_bg": "#3a6297", "frame_bg": "#d5d9dd", "highlight": "#2f6fd0",
+        "name": "Digital Studio Light", "style": "daw", "bg": "#c4c8cd", "fg": "#141619", "text_bg": "#e8ebee",
+        "text_fg": "#121417", "entry_bg": "#f7f8f9", "entry_fg": "#121417", "btn_bg": "#e2e5e8",
+        "btn_fg": "#141619", "btn_active_bg": "#f2f4f6", "frame_bg": "#d5d9dd", "highlight": "#2f6fd0",
         "select_bg": "#a8c9ee", "select_fg": "#000000", "border": "#8e959d", "muted": "#545a62",
-        "accent": "#2f6fd0", "group_title": "#244b80", "vocals": "#3f73b8", "wave": "#2c4d78",
+        "accent": "#2f6fd0", "group_title": "#244b80", "vocals": "#7fa8dc", "wave": "#2c4d78",
         "clock_bg": "#121a10", "clock_fg": "#b6ff5c", "playhead": "#0b1f4d",
+        "ruler_bg": "#d3d7db", "ruler_fg": "#2a2f35", "header_bg": "#b5bac0", "header_hi": "#c9cdd2",
+        "lane_line": "#8e959d", "grid_bar": "#8a96a6", "grid_beat": "#cfd5dc", "marker": "#c99a12",
+        "toolbar_top": "#d6dade", "toolbar_bot": "#b9bec4", "clip_text": "#0d1520", "notes_clip": "#7fa8dc",
     },
     # classic British large-format console strip: charcoal panel, cream legends, light-grey caps,
     # red / green / blue knobs, orange meters and green LEDs
@@ -105,11 +112,13 @@ THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "
                  ("running_red", "Running Red (light: white & red)"),
                  ("akai_dark", "Akai Dark (dark: bright red)"),
                  ("mech_red_orange", "Mechanical Red & Orange (dark: black, orange & red)"),
-                 ("digital_studio", "Digital Studio (dark: DAW edit window, green counter)"),
+                 ("digital_studio", "Digital Studio (dark: DAW edit window look)"),
                  ("digital_studio_light", "Digital Studio Light (light: classic DAW edit window)"),
                  ("studio_console", "Studio Console (dark: charcoal console strip)"),
                  ("studio_console_light", "Studio Console Light (light: silver-blue console strip)")]
 
+_BASE_KEYS = ("name", "bg", "fg", "text_bg", "text_fg", "entry_bg", "entry_fg", "btn_bg", "btn_fg", "btn_active_bg",
+              "frame_bg", "highlight", "select_bg", "select_fg", "border", "muted", "accent")
 _default_palette = None
 _default_font = None
 
@@ -122,8 +131,9 @@ def current_colors(theme: str) -> dict:
     dark = pal.window().color().lightness() < 128
     base = dict(THEMES["dark" if dark else "light"])
     base["accent"] = pal.highlight().color().name()
-    for k in ("wave", "clock_bg", "clock_fg", "group_title", "playhead", "vocals", "check_border"):
-        base.pop(k, None)
+    for k in list(base):
+        if k not in _BASE_KEYS:
+            base.pop(k, None)
     return base
 
 
@@ -196,7 +206,10 @@ def apply_theme(app: QApplication, theme: str, font_pt: int = 0) -> None:
     for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
         p.setColor(QPalette.Disabled, role, QColor(c["muted"]))
     app.setPalette(p)
-    app.setStyleSheet(_stylesheet(c, theme))
+    sheet = _stylesheet(c, theme)
+    if c.get("style") == "daw":
+        sheet += _daw_stylesheet(c)
+    app.setStyleSheet(sheet)
 
 
 def _stylesheet(c: dict, theme: str) -> str:
@@ -251,4 +264,76 @@ QProgressBar {{ border: 1px solid {c['border']}; border-radius: 4px; text-align:
 QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
 QToolTip {{ background: {c['frame_bg']}; color: {c['text_fg']}; border: 1px solid {c['border']}; }}
 QSplitter::handle {{ background: {c['border'] if theme != 'lyridan_dark' else '#333333'}; }}
+"""
+
+
+def _daw_stylesheet(c: dict) -> str:
+    """Extra rules for DAW-style themes: compact square controls, edit-window toolbar strips,
+    window-style tabs, slim scroll bars and recessed fields. Purely visual."""
+    top, bot = c["toolbar_top"], c["toolbar_bot"]
+    hi = c["header_hi"]
+    return f"""
+QMainWindow {{ background: {c['bg']}; }}
+QMenuBar {{ background: {bot}; border-bottom: 1px solid {c['border']}; }}
+QMenuBar::item {{ padding: 3px 9px; }}
+QMenu::item {{ padding: 4px 22px 4px 18px; }}
+QMenu::separator {{ height: 1px; background: {c['border']}; margin: 3px 6px; }}
+QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {hi}, stop:1 {c['btn_bg']});
+    color: {c['btn_fg']}; border: 1px solid {c['border']}; border-radius: 3px; padding: 4px 11px; }}
+QPushButton:hover {{ background: {c['btn_active_bg']}; border-color: {c['border']}; }}
+QPushButton:pressed {{ background: {c['select_bg']}; color: {c['select_fg']}; }}
+QPushButton:default {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {c['accent']},
+    stop:1 {c['highlight']}); color: #ffffff; border-color: {c['border']}; }}
+QPushButton:default:hover {{ background: {c['accent']}; }}
+QToolButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {hi}, stop:1 {c['btn_bg']});
+    color: {c['btn_fg']}; border: 1px solid {c['border']}; border-radius: 3px; padding: 2px 6px; }}
+QToolButton:hover {{ background: {c['btn_active_bg']}; }}
+QToolButton:pressed {{ background: {c['select_bg']}; }}
+QToolButton:checked {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {c['accent']},
+    stop:1 {c['highlight']}); color: #ffffff; border-color: {c['border']}; }}
+QLineEdit, QComboBox, QPlainTextEdit, QTextEdit {{ background: {c['entry_bg']};
+    color: {c['entry_fg']}; border: 1px solid {c['border']}; border-radius: 2px; }}
+QComboBox {{ padding: 2px 6px; }}
+QGroupBox {{ border: 1px solid {c['border']}; border-radius: 3px; margin-top: 20px; padding-top: 4px;
+    background: {c['frame_bg']}; }}
+QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; left: 0px; top: 0px;
+    padding: 2px 8px; color: {c['group_title']}; font-weight: bold;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot});
+    border: 1px solid {c['border']}; border-bottom: none; border-top-left-radius: 3px;
+    border-top-right-radius: 3px; }}
+QTabWidget::pane {{ border: 1px solid {c['border']}; border-radius: 0px; top: -1px; background: {c['frame_bg']}; }}
+QTabBar::tab {{ background: {bot}; color: {c['muted']}; border: 1px solid {c['border']}; border-bottom: none;
+    padding: 4px 14px; margin-right: 1px; border-top-left-radius: 3px; border-top-right-radius: 3px; }}
+QTabBar::tab:selected {{ background: {c['frame_bg']}; color: {c['fg']}; font-weight: bold;
+    border-top: 2px solid {c['accent']}; }}
+QTabBar::tab:hover:!selected {{ color: {c['fg']}; }}
+QHeaderView::section {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot});
+    color: {c['ruler_fg']}; border: none; border-right: 1px solid {c['border']};
+    border-bottom: 1px solid {c['border']}; padding: 3px 5px; }}
+QTableWidget, QListWidget, QTreeView {{ alternate-background-color: {c['frame_bg']}; border-radius: 0px; }}
+QFrame#FileCard {{ border: 1px solid {c['border']}; border-radius: 3px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot}); }}
+QFrame#TransportBar, QFrame#NavBar {{ border: 1px solid {c['border']}; border-radius: 0px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot}); }}
+QFrame#TransportBar QLabel, QFrame#NavBar QLabel {{ background: transparent; }}
+QFrame#TransportBar QLabel#MainCounter {{ background: {c['clock_bg']}; color: {c['clock_fg']}; border: 1px solid {c['border']};
+    border-radius: 2px; padding: 1px 6px; }}
+QStatusBar {{ background: {bot}; border-top: 1px solid {c['border']}; }}
+QSplitter::handle {{ background: {c['border']}; }}
+QSplitter::handle:vertical {{ height: 3px; }}
+QSplitter::handle:horizontal {{ width: 3px; }}
+QScrollBar:horizontal {{ background: {c['frame_bg']}; height: 12px; border: none; border-top: 1px solid {c['border']}; }}
+QScrollBar:vertical {{ background: {c['frame_bg']}; width: 12px; border: none; border-left: 1px solid {c['border']}; }}
+QScrollBar::handle:horizontal {{ background: {hi}; min-width: 24px; margin: 2px; border-radius: 3px; }}
+QScrollBar::handle:vertical {{ background: {hi}; min-height: 24px; margin: 2px; border-radius: 3px; }}
+QScrollBar::handle:hover {{ background: {c['muted']}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0px; height: 0px; border: none; background: none; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+QSlider::groove:horizontal {{ height: 4px; background: {c['entry_bg']}; border: 1px solid {c['border']};
+    border-radius: 2px; }}
+QSlider::sub-page:horizontal {{ background: {c['accent']}; border-radius: 2px; }}
+QSlider::handle:horizontal {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f2f3f5, stop:1 #a9adb3);
+    border: 1px solid {c['border']}; width: 9px; margin: -6px 0; border-radius: 2px; }}
+QProgressBar {{ border-radius: 2px; }}
+QProgressBar::chunk {{ border-radius: 1px; }}
 """

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QSlider, QSpinBox,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QSlider, QSpinBox,
                                QToolButton, QVBoxLayout, QWidget)
 
 from ..parsers.rsxml import Beatmap, VocalEntry
@@ -40,7 +40,12 @@ class TimelinePanel(QWidget):
         lay.setContentsMargins(0, 4, 0, 0)
         lay.setSpacing(4)
 
-        bar = QHBoxLayout()
+        # transport row, in a toolbar strip (DAW themes style #TransportBar; others see no frame)
+        self.transport_bar = QFrame()
+        self.transport_bar.setObjectName("TransportBar")
+        bar = QHBoxLayout(self.transport_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(4)                    # what the row had as a nested layout
         self.btn_audio = QToolButton()
         self.btn_audio.setText("🎵 Audio…")
         self.btn_audio.setToolTip("Pick the audio file your chart uses (the WAV/OGG from your EOF / DLC Builder "
@@ -58,11 +63,13 @@ class TimelinePanel(QWidget):
         self.btn_play.setToolTip("Play / pause (Space)")
         self.btn_play.clicked.connect(self.toggle_play)
         self.time_label = QLabel("0:00.000")
+        self.time_label.setObjectName("MainCounter")
         f = self.time_label.font()
         f.setFamily("Consolas" if os.name == "nt" else "Menlo")
         f.setBold(True)
         self.time_label.setFont(f)
         self.time_label.setMinimumWidth(90)
+        self._clock_pt = f.pointSizeF() if f.pointSizeF() > 0 else 10.0
         self.speed = QComboBox()
         for v in (0.5, 0.75, 1.0):
             self.speed.addItem(f"{v:g}×", v)
@@ -105,14 +112,17 @@ class TimelinePanel(QWidget):
         for wdg in (QLabel("Audio is"), self.audio_mode, self.nudge, self.speed, QLabel("🔊"), self.volume,
                     self.btn_metro, self.btn_follow):
             bar.addWidget(wdg)
-        lay.addLayout(bar)
+        lay.addWidget(self.transport_bar)
 
         self.preview = LyricPreview()
         lay.addWidget(self.preview)
         self.view = TimelineView()
 
         # navigation row: jump to a section, whole-song overview, zoom, keyboard help
-        nav = QHBoxLayout()
+        self.nav_bar = QFrame()
+        self.nav_bar.setObjectName("NavBar")
+        nav = QHBoxLayout(self.nav_bar)
+        nav.setContentsMargins(0, 0, 0, 0)
         nav.setSpacing(4)
         self.section_box = QComboBox()
         self.section_box.setToolTip("Jump to a section of the song (PgUp / PgDn in the timeline)")
@@ -143,7 +153,7 @@ class TimelinePanel(QWidget):
         nav.addWidget(self.overview, 1)
         for wdg in (btn_fit, zoom_out, zoom_in, self.btn_keys, self.focus_label):
             nav.addWidget(wdg)
-        lay.addLayout(nav)
+        lay.addWidget(self.nav_bar)
         lay.addWidget(self.view, 1)
 
         c = self.view.canvas
@@ -196,8 +206,23 @@ class TimelinePanel(QWidget):
         c.accent = QColor(color)
         c.wave_color = QColor(colors["wave"]) if colors.get("wave") else None
         c.playhead_color = QColor(colors.get("playhead", "#ff4d4d"))
+        c.daw = colors if colors.get("style") == "daw" else None
+        c.ROW_RULER = 32 if c.daw else type(c).ROW_RULER      # room for two stacked rulers
+        c._resize()
         c.update()
-        if colors.get("clock_bg"):
+        self.transport_bar.layout().setContentsMargins(*((2, 2, 2, 2) if c.daw else (0, 0, 0, 0)))
+        self.nav_bar.layout().setContentsMargins(*((2, 2, 2, 2) if c.daw else (0, 0, 0, 0)))
+        self.view.overlay.update()
+        self.overview.update()
+        f = self.time_label.font()
+        f.setPointSizeF(self._clock_pt * (1.22 if c.daw else 1.0))
+        self.time_label.setFont(f)
+        from PySide6.QtGui import QFontMetrics
+        self.time_label.setMinimumWidth(QFontMetrics(f).horizontalAdvance("00:00.000") + 16 if c.daw else 90)
+        self.time_label.setAlignment((Qt.AlignRight if c.daw else Qt.AlignLeft) | Qt.AlignVCenter)
+        if c.daw:
+            self.time_label.setStyleSheet("")        # the theme's QLabel#MainCounter rule draws it
+        elif colors.get("clock_bg"):
             self.time_label.setStyleSheet(f"background: {colors['clock_bg']}; color: {colors['clock_fg']}; "
                                           "border-radius: 4px; padding: 2px 8px;")
         else:
@@ -220,6 +245,7 @@ class TimelinePanel(QWidget):
                 QMessageBox.warning(self, "Lyridan", f"Could not load the audio:\n{e}")
             return False
         self.audio_label.setText(os.path.basename(path))
+        self.view.canvas.clip_name = os.path.splitext(os.path.basename(path))[0]
         self.audio_label.setToolTip(path)
         self.audio_label.setStyleSheet("")
         self.btn_audio.setText("🎵 Audio…")
@@ -236,6 +262,7 @@ class TimelinePanel(QWidget):
         if self._timer.isActive():
             self._timer.stop()
         self.player.unload()
+        self.view.canvas.clip_name = ""
         self.btn_play.setText("▶ Play")
         self._no_audio_label()
         self._update_shift()
