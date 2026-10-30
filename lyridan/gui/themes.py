@@ -33,6 +33,7 @@ THEMES = {
         "entry_bg": "#1a1a1a", "entry_fg": "#fbeb4e", "btn_bg": "#fbeb4e", "btn_fg": "#000000",
         "btn_active_bg": "#fff176", "frame_bg": "#0a0a0a", "highlight": "#fbeb4e", "select_bg": "#333333",
         "select_fg": "#fbeb4e", "border": "#fbeb4e", "muted": "#b8ac3c", "accent": "#fbeb4e",
+        "clock_bg": "#000000", "clock_fg": "#fbeb4e",
     },
     # light: white surfaces with one bold red accent (free-running rooftop look)
     "running_red": {

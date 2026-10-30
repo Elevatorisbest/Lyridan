@@ -107,10 +107,9 @@ class FileCard(QFrame):
         lay.addWidget(self.title)
         lay.addWidget(self.name, 1)
         self.info.hide()                      # details live in the name's tooltip and the status bar
-        self.browse = QPushButton("…")
+        self.browse = QToolButton()
+        self.browse.setText("…")
         self.browse.setToolTip(f"Open… ({title.lower()} file)")
-        self.browse.setFixedWidth(30)
-        self.browse.setAutoDefault(False)
         self.browse.setFocusPolicy(Qt.NoFocus)
         self.clear = QToolButton()
         self.clear.setText("✕")
@@ -135,7 +134,7 @@ def _cluster(caption: str = "") -> tuple:
     fr = QFrame()
     fr.setObjectName("ToolCluster")
     g = QGridLayout(fr)
-    g.setContentsMargins(6, 4, 6, 4)
+    g.setContentsMargins(5, 4, 5, 4)
     g.setHorizontalSpacing(4)
     g.setVerticalSpacing(3)
     if caption:
@@ -267,7 +266,7 @@ class MainWindow(QMainWindow):
         central = QWidget()
         central.setObjectName("EditWindow")
         root = QVBoxLayout(central)
-        root.setContentsMargins(6, 4, 6, 4)
+        root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(4)
 
         self.lyrics_card = FileCard("Lyrics", "Drop a .ttml or .lrc file here")
@@ -321,8 +320,8 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("EditToolbar")
         tb = QHBoxLayout(bar)
-        tb.setContentsMargins(4, 4, 4, 4)
-        tb.setSpacing(5)
+        tb.setContentsMargins(3, 3, 3, 3)
+        tb.setSpacing(3)
 
         session, g = _cluster("Session: the lyrics, the chart's beatmap and the song audio")
         audio_row = QHBoxLayout()
@@ -349,7 +348,8 @@ class MainWindow(QMainWindow):
         g.addWidget(tl.btn_play, 0, 2)
         g.addWidget(tl.btn_ff, 0, 3)
         g.addWidget(tl.btn_metro, 1, 0, 1, 2)
-        g.addWidget(tl.btn_follow, 1, 2, 1, 2)
+        g.addWidget(tl.btn_follow, 1, 2)
+        g.addWidget(tl.btn_loop, 1, 3)
         tb.addWidget(transport)
 
         counters, g = _cluster("Counters: chart time (as in the exported XML) and bar | beat | tick")
@@ -359,7 +359,8 @@ class MainWindow(QMainWindow):
         g.addWidget(tl.sub_counter, 1, 1)
         tb.addWidget(counters)
 
-        line, g = _cluster("The lyric line at the playhead")
+        line, g = _cluster("Range: the lyric line at the playhead, or the range you selected with Shift + drag "
+                           "(framed in the accent colour). Click Start / End to jump, Length to play it.")
         for row, (txt, lab) in enumerate((("Start", tl.line_start), ("End", tl.line_end),
                                           ("Length", tl.line_len))):
             g.addWidget(_caption(txt), row, 0)
@@ -382,7 +383,7 @@ class MainWindow(QMainWindow):
         g.addWidget(tl.speed, 1, 3)
         g.addWidget(_caption("🔊"), 2, 0)
         g.addWidget(tl.volume, 2, 1, 1, 3)
-        tl.volume.setFixedWidth(118)
+        tl.volume.setFixedWidth(100)
         tb.addWidget(play)
 
         side, g = _cluster()
@@ -1399,6 +1400,8 @@ class MainWindow(QMainWindow):
         self.timeline.btn_metro.setChecked(self.settings.metronome)
         self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
         self.timeline.set_navigation(self.settings.timeline_arrow_step, self.settings.timeline_accelerate)
+        self.timeline.click_focus = self.settings.timeline_click_focus
+        self.timeline._show_focus(self.timeline.view.canvas.hasFocus())
         if reset_ack:
             self._disclaimer_seen_this_session = False
         self.update()

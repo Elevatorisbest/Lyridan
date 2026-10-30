@@ -127,6 +127,9 @@ class TimelineCanvas(QWidget):
     fitRequested = Signal()
     leaveRequested = Signal()              # Esc: give the keyboard back to the rest of the window
     focusChanged = Signal(bool)
+    rangeSelected = Signal(float, float)   # Shift + drag: a play / loop range (chart seconds)
+    rangeCleared = Signal()                # Shift + click without dragging
+    loopKeyRequested = Signal()            # L
 
     ROW_RULER = 26
     ROW_SECTIONS = 20
@@ -157,6 +160,8 @@ class TimelineCanvas(QWidget):
         self.playhead_color = QColor("#ff4d4d")       # playhead + the syllable being sung (contrasts the accent)
         self.daw: Optional[dict] = None               # DAW-style theme colours (rulers, clips, lanes) or None
         self.clip_name = ""                           # audio file name shown on the waveform clip (DAW style)
+        self.selection: Optional[Tuple[float, float]] = None   # play / loop range, drawn over the tracks
+        self.loop_on = False
         self.active_index = -1
         self.arrow_step = "beat"
         self.accelerate = True
@@ -460,6 +465,21 @@ class TimelineCanvas(QWidget):
             self._draw_vocals(p, self.reference, self.ref_lines, rows["ref_lines"], rows["ref_sylls"], REF_COLOR,
                               t0, t1, small, False)
 
+        # play / loop range
+        if self.selection is not None:
+            a, b = self.selection
+            if b >= t0 and a <= t1:
+                xa, xb = self.x(a), self.x(b)
+                sel = QColor(d["select_bg"] if d else self.palette().highlight().color())
+                sel.setAlpha(70)
+                top = rulers_h
+                p.fillRect(QRectF(xa, top, xb - xa, h - top), sel)
+                band = QColor(self.accent if not self.loop_on else self.playhead_color)
+                p.fillRect(QRectF(xa, top - 4, xb - xa, 4), band)
+                p.setPen(QPen(band, 1))
+                p.drawLine(QPointF(xa, top - 4), QPointF(xa, h))
+                p.drawLine(QPointF(xb, top - 4), QPointF(xb, h))
+
         # playhead
         if self.playhead is not None and t0 <= self.playhead <= t1:
             X = self.x(self.playhead)
@@ -659,6 +679,12 @@ class TimelineCanvas(QWidget):
             return
         if ev.button() != Qt.LeftButton:
             return
+        if ev.modifiers() & Qt.ShiftModifier:          # Shift + drag: select a play / loop range
+            t = max(0.0, self.t_at(pos.x()))
+            self._drag = ("select", t)
+            self.selection = None                     # a Shift + click without dragging clears the range
+            self.update()
+            return
         sct = self._section_hit(pos)
         if sct is not None:
             self.seekRequested.emit(sct.start)
@@ -687,6 +713,12 @@ class TimelineCanvas(QWidget):
             sa = self._scroll_area()
             if sa:
                 sa.horizontalScrollBar().setValue(int(self._drag[2] - (ev.globalPosition().x() - self._drag[1])))
+            return
+        if self._drag and self._drag[0] == "select" and ev.buttons() & Qt.LeftButton:
+            t = max(0.0, self.t_at(ev.position().x()))
+            a, b = sorted((self._drag[1], t))
+            self.selection = (a, b) if b - a > 0.02 else None
+            self.update()
             return
         if self._drag and self._drag[0] == "scrub" and ev.buttons() & Qt.LeftButton:
             self.seekRequested.emit(max(0.0, self.t_at(ev.position().x())))
@@ -721,7 +753,19 @@ class TimelineCanvas(QWidget):
     def mouseReleaseEvent(self, ev):
         if self._drag and self._drag[0] == "pan":
             self.unsetCursor()
+        if self._drag and self._drag[0] == "select":
+            if self.selection is not None:
+                self.rangeSelected.emit(*self.selection)
+            else:
+                self.rangeCleared.emit()
         self._drag = None
+
+    def event(self, ev):
+        from PySide6.QtCore import QEvent
+        if ev.type() == QEvent.KeyPress and ev.key() in (Qt.Key_Tab, Qt.Key_Backtab):
+            ev.accept()          # Tab never moves the keyboard from the timeline into the settings
+            return True
+        return super().event(ev)
 
     def _scroll_area(self) -> Optional["TimelineView"]:
         w = self.parentWidget()
@@ -806,6 +850,8 @@ class TimelineCanvas(QWidget):
             self.playLineRequested.emit(ln.start if ln else t)
         elif key == Qt.Key_F and not mods:
             self.fitRequested.emit()
+        elif key == Qt.Key_L and not mods:
+            self.loopKeyRequested.emit()
         elif key == Qt.Key_Escape:
             self.leaveRequested.emit()
         else:
@@ -1131,7 +1177,10 @@ SHORTCUTS_HTML = """
 <tr><td><b>↑ ↓</b></td><td>zoom in / out</td></tr>
 <tr><td><b>Space</b> · <b>Enter</b></td><td>play / pause · play the current line</td></tr>
 <tr><td><b>F</b></td><td>fit the whole song</td></tr>
+<tr><td><b>L</b></td><td>loop on / off (repeats the range, or the current line)</td></tr>
 </table>
+<b>Range</b>: Shift + drag = select a range (the Start / End / Length clocks show it; Shift + click clears it).
+Click <b>Start</b> / <b>End</b> to jump there, <b>Length</b> to play the range.<br>
 <b>Mouse</b>: click = move the playhead (drag to scrub) · click a section = jump to it ·
 double-click a lyric line = play it · wheel = scroll (Shift = faster) · Ctrl + wheel = zoom ·
 right/middle-drag = pan · the overview strip above shows the whole song: click or drag it to look somewhere else.

@@ -73,6 +73,7 @@ class Settings:
     follow_playhead: bool = True
     timeline_arrow_step: str = "beat"      # 0.1s | quarter | half | beat | bar | 1s
     timeline_accelerate: bool = True       # arrow keys speed up while held
+    timeline_click_focus: bool = True      # preview / overview / transport / clock clicks give the timeline the keys
     export_folder: str = ""                # "" = next to the beatmap / lyrics
     last_session: Dict[str, str] = field(default_factory=dict)
 
