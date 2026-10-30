@@ -95,8 +95,9 @@ DISCLAIMER_HTML = """
 accurate, hand-made Rocksmith vocal track and is meant <b>strictly as a starting point</b> to speed up
 your own charting.</p>
 <ul>
-<li><b>Always verify the result yourself</b> - in Editor on Fire, Charter or DLC Builder, against the song -
-or have it checked by other charters before publishing.</li>
+<li><b>Always verify the result yourself</b> - open it in Editor on Fire or Charter and check it against the
+song (or have other charters check it) <b>before</b> building it into a CDLC. Don't drop the exported file straight
+into DLC Builder.</li>
 <li>Syllable splits, romanization / latinization, line breaks and timing can contain mistakes.</li>
 <li>The quality of the lyrics and of the sync <b>depends on the source file</b> (for example a .ttml from
 Apple Music) and <b>varies from song to song</b>. With line-synced .lrc files the syllable timing comes from

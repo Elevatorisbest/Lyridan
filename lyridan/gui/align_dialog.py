@@ -272,12 +272,23 @@ def run_alignment(window) -> None:
     hard = [l for l in report.lines if l.hard_to_hear and l.aligned]
     if hard:
         msg += "\n\nHard to hear (check these first):\n" + "\n".join(f"• {l.text[:60]}" for l in hard[:12])
-    msg += ("\n\nListen through the result and fix anything that is off. "
-            "Save it as a .ttml to reuse it?")
-    QMessageBox.information(window, "Alignment finished", msg)
-    base = os.path.splitext(window.source_path or "lyrics")[0]
-    path, _ = QFileDialog.getSaveFileName(window, "Save aligned lyrics", base + "_aligned.ttml",
-                                          "TTML lyrics (*.ttml)")
+    box = QMessageBox(window)
+    box.setIcon(QMessageBox.Information)
+    box.setWindowTitle("Alignment finished")
+    box.setText("<b>The lyrics are now timed to the song audio.</b>")
+    box.setInformativeText(
+        msg + "\n\nThe result is loaded either way - play it in the timeline and fix anything that sounds off.\n\n"
+        "Do you also want to save it as a syllable-synced .ttml file? Then you can open it again later "
+        "without aligning a second time.")
+    save_btn = box.addButton("Save as .ttml…", QMessageBox.AcceptRole)
+    box.addButton("Use without saving", QMessageBox.RejectRole)
+    box.setDefaultButton(save_btn)
+    box.exec()
+    path = ""
+    if box.clickedButton() is save_btn:
+        base = os.path.splitext(window.source_path or "lyrics")[0]
+        path, _ = QFileDialog.getSaveFileName(window, "Save aligned lyrics", base + "_aligned.ttml",
+                                              "TTML lyrics (*.ttml)")
     if path:
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(ttml(aligned))

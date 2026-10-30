@@ -1156,8 +1156,9 @@ class MainWindow(QMainWindow):
         self._export_done(path, [])
 
     def _export_done(self, path, warnings):
-        msg = f"Saved {os.path.basename(path)}"
-        self.statusBar().showMessage(msg, 10000)
+        msg = f"Saved {os.path.basename(path)} - open it in EOF or Charter and check it against the song before " \
+              "building your CDLC."
+        self.statusBar().showMessage(msg, 15000)
         if warnings:
             QMessageBox.information(self, "Exported", msg + "\n\n" + "\n".join("• " + w for w in warnings))
 

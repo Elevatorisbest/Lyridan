@@ -4,7 +4,7 @@
 
 Lyridan turns synced lyrics (`.ttml` or `.lrc`) into a **Rocksmith 2014 vocals arrangement XML**.
 The output is already syllabized, romanized and snapped to your chart's beatmap, ready to import into
-**Editor on Fire**, **Charter** or **DLC Builder**.
+**Editor on Fire** or **Charter**, where you check and fine-tune it before it goes into your CDLC.
 
 > Lyridan is a charting **assistant**, not a replacement for hand-made vocals. Always check the result
 > by ear before publishing.
@@ -30,7 +30,8 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 2. **Beatmap:** drop the arrangement XML of your chart (lead, rhythm or bass - it holds the synced beatmap).
 3. **Audio:** drop the audio file your chart uses, or pick it with **🎵 Audio…**. It's used for playback and the timeline.
 4. **Check:** look through the **Lyrics** tab (edit lines if needed), the **timeline** and the **Notes** tab.
-5. **Export:** click **Export Rocksmith vocals XML…** and import it in EOF / Charter / DLC Builder.
+5. **Export:** click **Export Rocksmith vocals XML…** and open it in EOF or Charter.
+6. **Review:** play it against the song and fix any wrong syllables, line breaks or timing there. Only then build your CDLC (e.g. in DLC Builder) - don't drop the export straight into a finished CDLC.
 
 Moving on to another song? **New chart…** (top right) clears the lyrics, beatmap, audio and your edits in one go.
 
