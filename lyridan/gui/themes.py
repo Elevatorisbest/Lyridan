@@ -62,14 +62,14 @@ THEMES = {
         "clock_fg": "#ff7a1f", "playhead": "#ffe14d",
     },
     # DAW edit window, dark: neutral graphite panels, stacked rulers, track name plates, clips with
-    # name bars, blue toggles and a large light-on-black counter ("style": "daw" adds the extra look)
+    # name bars, blue toggles and green-on-black counters ("style": "daw" adds the extra look)
     "digital_studio": {
         "name": "Digital Studio", "style": "daw", "bg": "#2c2d30", "fg": "#d4d6da", "text_bg": "#1d1e21",
         "text_fg": "#e3e5e8", "entry_bg": "#18191b", "entry_fg": "#eceef1", "btn_bg": "#45474c",
         "btn_fg": "#eef0f3", "btn_active_bg": "#54575d", "frame_bg": "#252629", "highlight": "#3b82d6",
         "select_bg": "#2d5b8f", "select_fg": "#ffffff", "border": "#0f1012", "muted": "#8f9298",
         "accent": "#4b97e6", "group_title": "#b9bcc2", "vocals": "#e2736c", "wave": "#e2736c",
-        "clock_bg": "#0b0c0d", "clock_fg": "#d6e6f7", "playhead": "#8fd3ff", "check_border": "#7d8087",
+        "clock_bg": "#060807", "clock_fg": "#3ee66b", "playhead": "#8fd3ff", "check_border": "#7d8087",
         "ruler_bg": "#323438", "ruler_fg": "#aeb2b8", "header_bg": "#38393d", "header_hi": "#45474c",
         "lane_line": "#0c0d0e", "grid_bar": "#49505a", "grid_beat": "#2b2e33", "marker": "#e9c349",
         "toolbar_top": "#3b3d41", "toolbar_bot": "#2e3033", "clip_text": "#101114", "notes_clip": "#5a8fd0",
@@ -251,7 +251,14 @@ QMenuBar::item:selected, QMenu::item:selected {{ background: {c['select_bg']}; c
 QMenu {{ background: {c['frame_bg']}; color: {c['fg']}; border: 1px solid {c['border']}; }}
 QStatusBar {{ background: {c['bg']}; color: {c['muted']}; }}
 QScrollArea {{ border: none; }}
-QFrame#FileCard {{ border: 1px solid {c['border']}; border-radius: 6px; background: {c['frame_bg']}; }}
+QFrame#FileCard {{ border: none; background: transparent; }}
+QFrame#EditToolbar {{ background: {c['frame_bg']}; border: 1px solid {c['border']}; border-radius: 3px; }}
+QFrame#ToolCluster {{ background: {c['bg']}; border: 1px solid {c['border']}; border-radius: 3px; }}
+QFrame#ToolCluster QLabel#ClusterCaption, QLabel#ClusterCaption {{ color: {c['muted']}; font-weight: bold;
+    background: transparent; }}
+QLabel#FileLcd {{ background: {c.get('clock_bg', c['entry_bg'])}; color: {c.get('clock_fg', c['entry_fg'])};
+    border: 1px solid {c['border']}; border-radius: 2px; padding: 1px 6px; }}
+QLabel#FileInfo {{ color: {c['muted']}; background: transparent; }}
 QSlider::groove:horizontal {{ height: 4px; background: {c['border']}; border-radius: 2px; }}
 QSlider::handle:horizontal {{ background: {c['accent']}; width: 12px; margin: -5px 0; border-radius: 6px; }}
 QCheckBox {{ spacing: 7px; }}
@@ -311,13 +318,15 @@ QHeaderView::section {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop
     color: {c['ruler_fg']}; border: none; border-right: 1px solid {c['border']};
     border-bottom: 1px solid {c['border']}; padding: 3px 5px; }}
 QTableWidget, QListWidget, QTreeView {{ alternate-background-color: {c['frame_bg']}; border-radius: 0px; }}
-QFrame#FileCard {{ border: 1px solid {c['border']}; border-radius: 3px;
+QFrame#FileCard {{ border: none; background: transparent; }}
+QFrame#EditToolbar {{ border: 1px solid {c['border']}; border-radius: 0px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot}); }}
+QFrame#ToolCluster {{ background: {c['frame_bg']}; border: 1px solid {c['border']}; border-radius: 3px; }}
+QFrame#ToolCluster QLabel#ClusterCaption, QLabel#ClusterCaption {{ color: {c['ruler_fg']}; }}
+QScrollArea#SettingsColumn {{ border: 1px solid {c['border']}; background: {c['frame_bg']}; }}
 QFrame#TransportBar, QFrame#NavBar {{ border: 1px solid {c['border']}; border-radius: 0px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bot}); }}
 QFrame#TransportBar QLabel, QFrame#NavBar QLabel {{ background: transparent; }}
-QFrame#TransportBar QLabel#MainCounter {{ background: {c['clock_bg']}; color: {c['clock_fg']}; border: 1px solid {c['border']};
-    border-radius: 2px; padding: 1px 6px; }}
 QStatusBar {{ background: {bot}; border-top: 1px solid {c['border']}; }}
 QSplitter::handle {{ background: {c['border']}; }}
 QSplitter::handle:vertical {{ height: 3px; }}

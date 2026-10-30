@@ -61,38 +61,93 @@ class _Warmup(QRunnable):
             pass
 
 
+class ElidedLabel(QLabel):
+    """A label that shortens its text with "…" instead of cutting it off when space is tight."""
+
+    def minimumSizeHint(self):
+        sh = super().minimumSizeHint()
+        sh.setWidth(self.minimumWidth())
+        return sh
+
+    def paintEvent(self, ev):
+        from PySide6.QtGui import QPainter
+        from PySide6.QtWidgets import QStyle, QStyleOption
+        p = QPainter(self)
+        opt = QStyleOption()
+        opt.initFrom(self)
+        self.style().drawPrimitive(QStyle.PE_Widget, opt, p, self)
+        r = self.contentsRect().adjusted(6, 0, -6, 0) if self.objectName() == "FileLcd" else self.contentsRect()
+        text = self.fontMetrics().elidedText(self.text(), Qt.ElideMiddle, r.width())
+        p.setPen(self.palette().color(self.foregroundRole()))
+        p.drawText(r, int(self.alignment() | Qt.AlignVCenter), text)
+        p.end()
+
+
 class FileCard(QFrame):
-    """Shows one input file with Browse / Clear buttons."""
+    """One input file as a compact toolbar row: caption, file name display, details, Open / Clear."""
 
     def __init__(self, title: str, hint: str, parent=None):
         super().__init__(parent)
         self.setObjectName("FileCard")
-        self.setFrameShape(QFrame.StyledPanel)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 6, 6, 6)
-        col = QVBoxLayout()
-        self.title = QLabel(f"<b>{title}</b>")
-        self.name = QLabel(hint)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        self.title = QLabel(title.upper())
+        self.title.setObjectName("ClusterCaption")
+        self.title.setFixedWidth(58)
+        self.name = ElidedLabel(hint)
+        self.name.setObjectName("FileLcd")
         self.name.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.name.setWordWrap(True)
-        self.info = QLabel("")
-        self.info.setStyleSheet("color: gray;")
-        col.addWidget(self.title)
-        col.addWidget(self.name)
-        col.addWidget(self.info)
-        lay.addLayout(col, 1)
-        self.browse = QPushButton("Browse…")
+        self.name.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.name.setMinimumWidth(90)
+        self.info = ElidedLabel("")
+        self.info.setObjectName("FileInfo")
+        self.info.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.info.setMinimumWidth(40)
+        lay.addWidget(self.title)
+        lay.addWidget(self.name, 1)
+        self.info.hide()                      # details live in the name's tooltip and the status bar
+        self.browse = QPushButton("…")
+        self.browse.setToolTip(f"Open… ({title.lower()} file)")
+        self.browse.setFixedWidth(30)
+        self.browse.setAutoDefault(False)
+        self.browse.setFocusPolicy(Qt.NoFocus)
         self.clear = QToolButton()
         self.clear.setText("✕")
         self.clear.setToolTip("Remove")
+        self.clear.setFocusPolicy(Qt.NoFocus)
         lay.addWidget(self.browse)
         lay.addWidget(self.clear)
         self.hint = hint
+        self.setToolTip(hint)
 
     def set_file(self, path: Optional[str], info: str = ""):
         self.name.setText(os.path.basename(path) if path else self.hint)
-        self.name.setToolTip(path or "")
+        self.name.setToolTip("\n".join(x for x in (path or self.hint, info) if x))
         self.info.setText(info)
+        self.info.setToolTip(info)
+        self.name.setStatusTip(info)
+
+
+def _cluster(caption: str = "") -> tuple:
+    """A framed toolbar group (like a DAW edit-window tool cluster); returns (frame, grid layout)."""
+    from PySide6.QtWidgets import QGridLayout
+    fr = QFrame()
+    fr.setObjectName("ToolCluster")
+    g = QGridLayout(fr)
+    g.setContentsMargins(6, 4, 6, 4)
+    g.setHorizontalSpacing(4)
+    g.setVerticalSpacing(3)
+    if caption:
+        fr.setToolTip(caption)
+    return fr, g
+
+
+def _caption(text: str) -> QLabel:
+    lab = QLabel(text)
+    lab.setObjectName("ClusterCaption")
+    lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    return lab
 
 
 class MainWindow(QMainWindow):
@@ -206,19 +261,21 @@ class MainWindow(QMainWindow):
         hm.addAction(a)
 
     def _build_ui(self):
+        """Edit-window layout: a full-width toolbar (session files, transport, counters, line and tempo
+        readouts, playback), the universe strip, then settings | timeline, and the lyric editor underneath.
+        Every control is the same widget as before (same signals and shortcuts), only arranged differently."""
         central = QWidget()
+        central.setObjectName("EditWindow")
         root = QVBoxLayout(central)
-        root.setContentsMargins(10, 8, 10, 8)
+        root.setContentsMargins(6, 4, 6, 4)
+        root.setSpacing(4)
 
-        cards = QHBoxLayout()
-        self.lyrics_card = FileCard("1. Lyrics", "Drop a .ttml or .lrc file here")
+        self.lyrics_card = FileCard("Lyrics", "Drop a .ttml or .lrc file here")
         self.lyrics_card.browse.clicked.connect(self.open_lyrics)
         self.lyrics_card.clear.clicked.connect(self.clear_lyrics)
-        self.beat_card = FileCard("2. Beatmap", "Drop the Rocksmith XML of your chart (lead/rhythm/bass)")
+        self.beat_card = FileCard("Beatmap", "Drop the Rocksmith XML of your chart (lead/rhythm/bass)")
         self.beat_card.browse.clicked.connect(self.open_beatmap)
         self.beat_card.clear.clicked.connect(self.clear_beatmap)
-        cards.addWidget(self.lyrics_card, 3)
-        cards.addWidget(self.beat_card, 3)
         new_btn = QPushButton("New chart…")
         new_btn.setToolTip("Clear the lyrics, beatmap, audio and edits to start on another song "
                            "(asks first; your settings are kept)")
@@ -231,15 +288,7 @@ class MainWindow(QMainWindow):
         opt_btn.clicked.connect(self.open_options)
         opt_btn.setAutoDefault(False)
         opt_btn.setFocusPolicy(Qt.NoFocus)
-        side = QVBoxLayout()
-        side.setSpacing(6)
-        side.addWidget(opt_btn)
-        side.addStretch(1)
-        side.addWidget(new_btn)
-        cards.addLayout(side)
-        root.addLayout(cards)
 
-        split = QSplitter(Qt.Horizontal)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_editor(), "Lyrics")
         self.rs_preview = QPlainTextEdit()
@@ -266,23 +315,107 @@ class MainWindow(QMainWindow):
         self.timeline.entryActivated.connect(self._on_entry_activated)
         self.timeline.audioChanged.connect(self._on_audio_changed)
         self.timeline.leaveRequested.connect(lambda: self.table.setFocus(Qt.OtherFocusReason))
-        left = QSplitter(Qt.Vertical)
-        left.addWidget(self.tabs)
-        left.addWidget(self.timeline)
-        left.setStretchFactor(0, 3)
-        left.setStretchFactor(1, 2)
-        left.setSizes([360, 440])
-        left.setChildrenCollapsible(False)
-        split.addWidget(left)
+        tl = self.timeline
 
+        # ---- toolbar
+        bar = QFrame()
+        bar.setObjectName("EditToolbar")
+        tb = QHBoxLayout(bar)
+        tb.setContentsMargins(4, 4, 4, 4)
+        tb.setSpacing(5)
+
+        session, g = _cluster("Session: the lyrics, the chart's beatmap and the song audio")
+        audio_row = QHBoxLayout()
+        audio_row.setSpacing(4)
+        cap = QLabel("AUDIO")
+        cap.setObjectName("ClusterCaption")
+        cap.setFixedWidth(58)
+        tl.audio_label.setObjectName("FileLcd")
+        tl.audio_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        tl.audio_label.setMinimumWidth(90)
+        tl.btn_audio.setText("🎵 Audio…")
+        audio_row.addWidget(cap)
+        audio_row.addWidget(tl.audio_label, 1)
+        audio_row.addWidget(tl.btn_audio)
+        g.addWidget(self.lyrics_card, 0, 0)
+        g.addWidget(self.beat_card, 1, 0)
+        g.addLayout(audio_row, 2, 0)
+        session.setMinimumWidth(280)
+        tb.addWidget(session, 5)
+
+        transport, g = _cluster("Transport")
+        g.addWidget(tl.btn_start, 0, 0)
+        g.addWidget(tl.btn_rew, 0, 1)
+        g.addWidget(tl.btn_play, 0, 2)
+        g.addWidget(tl.btn_ff, 0, 3)
+        g.addWidget(tl.btn_metro, 1, 0, 1, 2)
+        g.addWidget(tl.btn_follow, 1, 2, 1, 2)
+        tb.addWidget(transport)
+
+        counters, g = _cluster("Counters: chart time (as in the exported XML) and bar | beat | tick")
+        g.addWidget(_caption("MAIN"), 0, 0)
+        g.addWidget(tl.time_label, 0, 1)
+        g.addWidget(_caption("SUB"), 1, 0)
+        g.addWidget(tl.sub_counter, 1, 1)
+        tb.addWidget(counters)
+
+        line, g = _cluster("The lyric line at the playhead")
+        for row, (txt, lab) in enumerate((("Start", tl.line_start), ("End", tl.line_end),
+                                          ("Length", tl.line_len))):
+            g.addWidget(_caption(txt), row, 0)
+            g.addWidget(lab, row, 1)
+        tb.addWidget(line)
+
+        tempo, g = _cluster("Beatmap tempo and meter at the playhead")
+        g.addWidget(_caption("Tempo"), 0, 0)
+        g.addWidget(tl.tempo_lcd, 0, 1)
+        g.addWidget(_caption("Meter"), 1, 0)
+        g.addWidget(tl.meter_lcd, 1, 1)
+        tb.addWidget(tempo)
+
+        play, g = _cluster("Preview playback (does not change the export)")
+        g.addWidget(_caption("Audio is"), 0, 0)
+        g.addWidget(tl.audio_mode, 0, 1, 1, 3)
+        g.addWidget(_caption("Nudge"), 1, 0)
+        g.addWidget(tl.nudge, 1, 1)
+        g.addWidget(_caption("Speed"), 1, 2)
+        g.addWidget(tl.speed, 1, 3)
+        g.addWidget(_caption("🔊"), 2, 0)
+        g.addWidget(tl.volume, 2, 1, 1, 3)
+        tl.volume.setFixedWidth(118)
+        tb.addWidget(play)
+
+        side, g = _cluster()
+        g.addWidget(opt_btn, 0, 0)
+        g.addWidget(new_btn, 1, 0)
+        g.setRowStretch(2, 1)
+        tb.addWidget(side)
+        root.addWidget(bar)
+        tl.transport_bar.hide()                # its controls now live in the toolbar
+
+        # ---- universe strip (section jump, whole-song overview, zoom, keys), full width
+        root.addWidget(tl.nav_bar)
+
+        # ---- settings | timeline, editor underneath
         settings_scroll = QScrollArea()
+        settings_scroll.setObjectName("SettingsColumn")
         settings_scroll.setWidgetResizable(True)
-        settings_scroll.setMinimumWidth(360)
+        settings_scroll.setMinimumWidth(300)
         settings_scroll.setWidget(self._build_settings())
-        split.addWidget(settings_scroll)
+        top = QSplitter(Qt.Horizontal)
+        top.addWidget(settings_scroll)
+        top.addWidget(tl)
+        top.setStretchFactor(0, 0)
+        top.setStretchFactor(1, 1)
+        top.setSizes([340, 1030])
+        top.setChildrenCollapsible(False)
+        split = QSplitter(Qt.Vertical)
+        split.addWidget(top)
+        split.addWidget(self.tabs)
         split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 1)
-        split.setSizes([980, 400])
+        split.setStretchFactor(1, 2)
+        split.setSizes([430, 260])
+        split.setChildrenCollapsible(False)
         root.addWidget(split, 1)
 
         bottom = QHBoxLayout()
@@ -295,7 +428,7 @@ class MainWindow(QMainWindow):
         self.btn_native.clicked.connect(self.export_native)
         self.btn_export = QPushButton("Export Rocksmith vocals XML…")
         self.btn_export.setDefault(True)
-        self.btn_export.setMinimumHeight(34)
+        self.btn_export.setMinimumHeight(30)
         f = self.btn_export.font()
         f.setBold(True)
         self.btn_export.setFont(f)

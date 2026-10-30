@@ -19,6 +19,11 @@ AUDIO_EXT = (".wav", ".ogg", ".flac", ".mp3", ".opus", ".m4a", ".aif", ".aiff")
 AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.opus *.m4a *.aif *.aiff);;All files (*)"
 
 
+def _clock(t: float) -> str:
+    m, s = divmod(max(0.0, t), 60)
+    return f"{int(m)}:{s:06.3f}"
+
+
 def _mmss(t: float) -> str:
     m, s = divmod(int(max(0.0, t)), 60)
     return f"{m}:{s:02d}"
@@ -131,15 +136,15 @@ class TimelinePanel(QWidget):
         self.overview = OverviewBar(self.view)
         self.overview.jumpRequested.connect(self.view.center_on)
         self.overview.seekRequested.connect(lambda t: (self.seek_chart(t), self.view.center_on(t)))
-        btn_fit = QToolButton()
+        self.btn_fit = btn_fit = QToolButton()
         btn_fit.setText("Fit")
         btn_fit.setToolTip("Show the whole song (F)")
         btn_fit.clicked.connect(self.view.fit)
-        zoom_out = QToolButton()
+        self.btn_zoom_out = zoom_out = QToolButton()
         zoom_out.setText("−")
         zoom_out.setToolTip("Zoom out (↓ or Ctrl + wheel)")
         zoom_out.clicked.connect(lambda: self.zoom_by(1 / 1.4))
-        zoom_in = QToolButton()
+        self.btn_zoom_in = zoom_in = QToolButton()
         zoom_in.setText("+")
         zoom_in.setToolTip("Zoom in (↑ or Ctrl + wheel)")
         zoom_in.clicked.connect(lambda: self.zoom_by(1.4))
@@ -167,6 +172,26 @@ class TimelinePanel(QWidget):
         c.focusChanged.connect(self._show_focus)
         self._show_focus(False)
 
+        # edit-window readouts (read-only) and line rewind / fast-forward (same as Ctrl/Alt + ← →)
+        self.btn_rew = QToolButton()
+        self.btn_rew.setText("◀◀")
+        self.btn_rew.setToolTip("Previous lyric line (Ctrl/Alt + ← in the timeline)")
+        self.btn_rew.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), -1)))
+        self.btn_ff = QToolButton()
+        self.btn_ff.setText("▶▶")
+        self.btn_ff.setToolTip("Next lyric line (Ctrl/Alt + → in the timeline)")
+        self.btn_ff.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), 1)))
+        for b in (self.btn_rew, self.btn_ff):
+            b.setFocusPolicy(Qt.NoFocus)
+        self.sub_counter = self._lcd("SubCounter", "Bar | beat | tick at the playhead (960 ticks per beat)")
+        self.line_start = self._lcd("Lcd", "Start of the lyric line at the playhead")
+        self.line_end = self._lcd("Lcd", "End of the lyric line at the playhead")
+        self.line_len = self._lcd("Lcd", "Length of the lyric line at the playhead")
+        self.tempo_lcd = self._lcd("Lcd", "Tempo of the chart's beatmap at the playhead")
+        self.meter_lcd = self._lcd("Lcd", "Beats per bar at the playhead")
+        self._beat_bar: List[int] = []          # bar number of every beat
+        self._beat_pos: List[int] = []          # beat number inside its bar
+
         # safeguard: toolbar controls never keep the keyboard, so arrow keys meant for the
         # timeline cannot change the speed, audio mode, volume... by accident
         for wdg in self.findChildren(QToolButton) + [self.volume]:
@@ -185,6 +210,19 @@ class TimelinePanel(QWidget):
         sc.setContext(Qt.WidgetWithChildrenShortcut)
         sc.activated.connect(self.toggle_play)
 
+    @staticmethod
+    def _lcd(name: str, tip: str) -> QLabel:
+        lab = QLabel("")
+        lab.setObjectName(name)
+        lab.setToolTip(tip)
+        lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        f = lab.font()
+        f.setFamily("Consolas" if os.name == "nt" else "Menlo")
+        f.setStyleHint(f.StyleHint.Monospace)
+        f.setBold(True)
+        lab.setFont(f)
+        return lab
+
     # ------------------------------------------------------------------ data
     def set_project(self, beatmap: Optional[Beatmap], entries: List[VocalEntry], reference: List[VocalEntry],
                     silence_end: float, bars_end: float, song_shift: float):
@@ -193,6 +231,15 @@ class TimelinePanel(QWidget):
         self.song_shift = song_shift
         self.view.canvas.set_data(beatmap, self.entries, reference, silence_end, bars_end)
         self.preview.set_entries(self.entries)
+        self._beat_bar, self._beat_pos = [], []
+        if beatmap and beatmap.beats:
+            bar, pos = 0, 0
+            for k, is_m in enumerate(beatmap.measure_flags):
+                if is_m or k == 0:
+                    bar, pos = bar + 1, 0
+                pos += 1
+                self._beat_bar.append(bar)
+                self._beat_pos.append(pos)
         self._fill_sections()
         self.overview.update()
         self._update_shift()
@@ -214,20 +261,30 @@ class TimelinePanel(QWidget):
         self.nav_bar.layout().setContentsMargins(*((2, 2, 2, 2) if c.daw else (0, 0, 0, 0)))
         self.view.overlay.update()
         self.overview.update()
-        f = self.time_label.font()
-        f.setPointSizeF(self._clock_pt * (1.22 if c.daw else 1.0))
-        self.time_label.setFont(f)
-        from PySide6.QtGui import QFontMetrics
-        self.time_label.setMinimumWidth(QFontMetrics(f).horizontalAdvance("00:00.000") + 16 if c.daw else 90)
-        self.time_label.setAlignment((Qt.AlignRight if c.daw else Qt.AlignLeft) | Qt.AlignVCenter)
-        if c.daw:
-            self.time_label.setStyleSheet("")        # the theme's QLabel#MainCounter rule draws it
-        elif colors.get("clock_bg"):
-            self.time_label.setStyleSheet(f"background: {colors['clock_bg']}; color: {colors['clock_fg']}; "
-                                          "border-radius: 4px; padding: 2px 8px;")
-        else:
-            self.time_label.setStyleSheet("padding: 2px 8px;")
+        self.style_counters(colors)
         self._show_focus(self.view.canvas.hasFocus())
+
+    def style_counters(self, colors: dict):
+        """Edit-window counters: green (or the theme's clock colour) digits on a black LCD, in every theme."""
+        from PySide6.QtGui import QFontMetrics
+        bg = colors.get("clock_bg") or "#0b0c0d"
+        fg = colors.get("clock_fg") or "#3fe06a"
+        edge = colors.get("border") or "#000000"
+        base = self._clock_pt
+        for lab, scale, pad, sample in ((self.time_label, 1.9, "2px 10px", "00:00.000"),
+                                        (self.sub_counter, 1.25, "1px 10px", "000| 0| 000"),
+                                        (self.line_start, 1.0, "1px 6px", "0:00.000"),
+                                        (self.line_end, 1.0, "1px 6px", "0:00.000"),
+                                        (self.line_len, 1.0, "1px 6px", "0:00.000"),
+                                        (self.tempo_lcd, 1.0, "1px 6px", "♩ 000.0"),
+                                        (self.meter_lcd, 1.0, "1px 6px", "00/00")):
+            f = lab.font()
+            f.setPointSizeF(base * scale)
+            lab.setFont(f)
+            lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lab.setMinimumWidth(QFontMetrics(f).horizontalAdvance(sample) + (26 if scale > 1 else 16))
+            lab.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {edge}; border-radius: 2px; "
+                              f"padding: {pad};")
 
     def choose_audio(self):
         start = os.path.dirname(self.player.path) if self.player.path else ""
@@ -425,6 +482,43 @@ class TimelinePanel(QWidget):
         m, s = divmod(max(0.0, t), 60)
         self.time_label.setText(f"{int(m)}:{s:06.3f}")
         self.time_label.setToolTip("Chart time (as in the exported XML)")
+        self._show_readouts(t)
+
+    def _show_readouts(self, t: float):
+        """Bars|Beats sub counter, current line start/end/length, tempo and meter (display only)."""
+        bm = self.beatmap
+        beats = bm.beats if bm else []
+        k = bisect.bisect_right(beats, t) - 1 if beats else -1
+        if 0 <= k < len(self._beat_bar):
+            nxt = beats[k + 1] if k + 1 < len(beats) else beats[k] + (beats[k] - beats[k - 1] if k else 0.5)
+            span = max(1e-6, nxt - beats[k])
+            tick = int(min(959, (t - beats[k]) / span * 960))
+            self.sub_counter.setText(f"{self._beat_bar[k]:>3}| {self._beat_pos[k]}| {tick:03d}")
+            self.tempo_lcd.setText(f"♩ {60.0 / span:.1f}")
+            j = k + 1                                   # beats in this bar = last beat number before the next bar
+            while j < len(self._beat_bar) and self._beat_bar[j] == self._beat_bar[k]:
+                j += 1
+            den = 4
+            for ts_t, _num, ts_den in (bm.ts_events or []):
+                if ts_t <= t + 1e-6 and ts_den:
+                    den = ts_den
+            self.meter_lcd.setText(f"{self._beat_pos[j - 1]}/{den}")
+        else:
+            self.sub_counter.setText("  0| 0| 000")
+            self.tempo_lcd.setText("♩ —")
+            self.meter_lcd.setText("—")
+        c = self.view.canvas
+        ai = self._active_index(t)
+        ln = c._line_of(ai) if ai >= 0 else None
+        if ln is not None and t > ln.end + 0.5 and ai + 1 >= len(self.entries):
+            ln = None
+        if ln is None:
+            for lab in (self.line_start, self.line_end, self.line_len):
+                lab.setText("—")
+        else:
+            self.line_start.setText(_clock(ln.start))
+            self.line_end.setText(_clock(ln.end))
+            self.line_len.setText(_clock(ln.end - ln.start))
 
     def shutdown(self):
         self._timer.stop()
