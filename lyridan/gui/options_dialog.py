@@ -88,10 +88,15 @@ class OptionsDialog(QDialog):
         self.accel = QCheckBox("Speed up while an arrow key is held")
         self.accel.setChecked(self.s.timeline_accelerate)
         f.addRow(self.accel)
-        tip = QLabel("Timeline keys work only after you click the timeline (a coloured frame shows it); Esc gives "
-                     "the keyboard back. ← → step · Shift = faster · Ctrl/Alt + ← → = lines · PgUp/PgDn = "
-                     "sections · ↑ ↓ = zoom · Space = play/pause · Enter = play the line · Ctrl+P = play/pause "
-                     "anywhere.")
+        self.click_focus = QCheckBox("Clicking the lyric preview, the overview strip, the transport buttons or the "
+                                     "clocks also gives the keyboard to the timeline")
+        self.click_focus.setChecked(self.s.timeline_click_focus)
+        self.click_focus.setToolTip("Off: only a click on the timeline itself makes the arrow keys move the playhead.")
+        f.addRow(self.click_focus)
+        tip = QLabel("Timeline keys work only while the timeline has the keyboard (a coloured frame shows it); Esc "
+                     "gives it back, and Tab never moves it into the settings. ← → step · Shift = faster · Ctrl/Alt + ← → = lines · PgUp/PgDn = "
+                     "sections · ↑ ↓ = zoom · Space = play/pause · Enter = play the line · L = loop · "
+                     "Shift + drag = select a range · Ctrl+P = play/pause anywhere.")
         tip.setWordWrap(True)
         tip.setStyleSheet("color: gray;")
         f.addRow(tip)
@@ -193,6 +198,7 @@ class OptionsDialog(QDialog):
         s.follow_playhead = self.follow.isChecked()
         s.timeline_arrow_step = self.arrow_step.currentData()
         s.timeline_accelerate = self.accel.isChecked()
+        s.timeline_click_focus = self.click_focus.isChecked()
         s.restore_session = self.restore.isChecked()
         s.export_folder = self.export_dir.text().strip()
         s.disclaimer_acknowledged = not self.disclaimer.isChecked()

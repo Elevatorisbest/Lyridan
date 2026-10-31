@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QSlider, QSpinBox,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QSlider, QSpinBox,
                                QToolButton, QVBoxLayout, QWidget)
 
 from ..parsers.rsxml import Beatmap, VocalEntry
@@ -17,6 +17,11 @@ from .timeline import SHORTCUTS_HTML, OverviewBar, TimelineView
 
 AUDIO_EXT = (".wav", ".ogg", ".flac", ".mp3", ".opus", ".m4a", ".aif", ".aiff")
 AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.opus *.m4a *.aif *.aiff);;All files (*)"
+
+
+def _clock(t: float) -> str:
+    m, s = divmod(max(0.0, t), 60)
+    return f"{int(m)}:{s:06.3f}"
 
 
 def _mmss(t: float) -> str:
@@ -29,6 +34,8 @@ class TimelinePanel(QWidget):
     audioChanged = Signal(str)
     leaveRequested = Signal()           # Esc in the timeline
 
+    click_focus = True                  # preview / overview / transport / clock clicks give the timeline the keys
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.player = AudioPlayer()
@@ -40,7 +47,12 @@ class TimelinePanel(QWidget):
         lay.setContentsMargins(0, 4, 0, 0)
         lay.setSpacing(4)
 
-        bar = QHBoxLayout()
+        # transport row, in a toolbar strip (DAW themes style #TransportBar; others see no frame)
+        self.transport_bar = QFrame()
+        self.transport_bar.setObjectName("TransportBar")
+        bar = QHBoxLayout(self.transport_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(4)                    # what the row had as a nested layout
         self.btn_audio = QToolButton()
         self.btn_audio.setText("🎵 Audio…")
         self.btn_audio.setToolTip("Pick the audio file your chart uses (the WAV/OGG from your EOF / DLC Builder "
@@ -58,11 +70,13 @@ class TimelinePanel(QWidget):
         self.btn_play.setToolTip("Play / pause (Space)")
         self.btn_play.clicked.connect(self.toggle_play)
         self.time_label = QLabel("0:00.000")
+        self.time_label.setObjectName("MainCounter")
         f = self.time_label.font()
         f.setFamily("Consolas" if os.name == "nt" else "Menlo")
         f.setBold(True)
         self.time_label.setFont(f)
         self.time_label.setMinimumWidth(90)
+        self._clock_pt = f.pointSizeF() if f.pointSizeF() > 0 else 10.0
         self.speed = QComboBox()
         for v in (0.5, 0.75, 1.0):
             self.speed.addItem(f"{v:g}×", v)
@@ -105,14 +119,17 @@ class TimelinePanel(QWidget):
         for wdg in (QLabel("Audio is"), self.audio_mode, self.nudge, self.speed, QLabel("🔊"), self.volume,
                     self.btn_metro, self.btn_follow):
             bar.addWidget(wdg)
-        lay.addLayout(bar)
+        lay.addWidget(self.transport_bar)
 
         self.preview = LyricPreview()
         lay.addWidget(self.preview)
         self.view = TimelineView()
 
         # navigation row: jump to a section, whole-song overview, zoom, keyboard help
-        nav = QHBoxLayout()
+        self.nav_bar = QFrame()
+        self.nav_bar.setObjectName("NavBar")
+        nav = QHBoxLayout(self.nav_bar)
+        nav.setContentsMargins(0, 0, 0, 0)
         nav.setSpacing(4)
         self.section_box = QComboBox()
         self.section_box.setToolTip("Jump to a section of the song (PgUp / PgDn in the timeline)")
@@ -121,15 +138,15 @@ class TimelinePanel(QWidget):
         self.overview = OverviewBar(self.view)
         self.overview.jumpRequested.connect(self.view.center_on)
         self.overview.seekRequested.connect(lambda t: (self.seek_chart(t), self.view.center_on(t)))
-        btn_fit = QToolButton()
+        self.btn_fit = btn_fit = QToolButton()
         btn_fit.setText("Fit")
         btn_fit.setToolTip("Show the whole song (F)")
         btn_fit.clicked.connect(self.view.fit)
-        zoom_out = QToolButton()
+        self.btn_zoom_out = zoom_out = QToolButton()
         zoom_out.setText("−")
         zoom_out.setToolTip("Zoom out (↓ or Ctrl + wheel)")
         zoom_out.clicked.connect(lambda: self.zoom_by(1 / 1.4))
-        zoom_in = QToolButton()
+        self.btn_zoom_in = zoom_in = QToolButton()
         zoom_in.setText("+")
         zoom_in.setToolTip("Zoom in (↑ or Ctrl + wheel)")
         zoom_in.clicked.connect(lambda: self.zoom_by(1.4))
@@ -143,7 +160,7 @@ class TimelinePanel(QWidget):
         nav.addWidget(self.overview, 1)
         for wdg in (btn_fit, zoom_out, zoom_in, self.btn_keys, self.focus_label):
             nav.addWidget(wdg)
-        lay.addLayout(nav)
+        lay.addWidget(self.nav_bar)
         lay.addWidget(self.view, 1)
 
         c = self.view.canvas
@@ -156,6 +173,53 @@ class TimelinePanel(QWidget):
         c.leaveRequested.connect(self.leaveRequested.emit)
         c.focusChanged.connect(self._show_focus)
         self._show_focus(False)
+
+        # edit-window readouts (read-only) and line rewind / fast-forward (same as Ctrl/Alt + ← →)
+        self.btn_rew = QToolButton()
+        self.btn_rew.setText("◀◀")
+        self.btn_rew.setToolTip("Previous lyric line (Ctrl/Alt + ← in the timeline)")
+        self.btn_rew.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), -1)))
+        self.btn_ff = QToolButton()
+        self.btn_ff.setText("▶▶")
+        self.btn_ff.setToolTip("Next lyric line (Ctrl/Alt + → in the timeline)")
+        self.btn_ff.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), 1)))
+        self.btn_loop = QToolButton()
+        self.btn_loop.setText("⟲ Loop")
+        self.btn_loop.setCheckable(True)
+        self.btn_loop.setToolTip("Repeat the range shown in Start / End while playing (L in the timeline).\n"
+                                 "With no range selected it locks onto the line at the playhead.\n"
+                                 "Shift + drag in the timeline selects a range.")
+        self.btn_loop.toggled.connect(self._loop_toggled)
+        for b in (self.btn_rew, self.btn_ff, self.btn_loop):
+            b.setFocusPolicy(Qt.NoFocus)
+        self.sub_counter = self._lcd("SubCounter", "Bar | beat | tick at the playhead (960 ticks per beat)")
+        self.line_start = self._lcd("Lcd", "Start of the lyric line at the playhead")
+        self.line_end = self._lcd("Lcd", "End of the lyric line at the playhead")
+        self.line_len = self._lcd("Lcd", "Length of the lyric line at the playhead")
+        self.tempo_lcd = self._lcd("Lcd", "Tempo of the chart's beatmap at the playhead")
+        self.meter_lcd = self._lcd("Lcd", "Beats per bar at the playhead")
+        self.line_start.setToolTip("Start of the range (or of the line at the playhead) - click to jump there")
+        self.line_end.setToolTip("End of the range (or of the line at the playhead) - click to jump there")
+        self.line_len.setToolTip("Length of the range (or of the line at the playhead) - click to play it")
+        self.time_label.setToolTip("Chart time (as in the exported XML) - click to use the timeline keys")
+        self.sub_counter.setToolTip("Bar | beat | tick at the playhead (960 ticks per beat) - click to use the "
+                                    "timeline keys")
+        for lab in (self.line_start, self.line_end, self.line_len, self.time_label, self.sub_counter):
+            lab.setCursor(Qt.PointingHandCursor)
+            lab.installEventFilter(self)
+        self._auto_range = False                # the range was set by Loop (follows nothing), not by the user
+        self._play_until: Optional[float] = None  # Length click: stop here
+        self._prev_t = 0.0
+        self.preview.installEventFilter(self)
+        self.overview.installEventFilter(self)
+        for b in (self.btn_start, self.btn_rew, self.btn_play, self.btn_ff, self.btn_loop, self.btn_metro,
+                  self.btn_follow, self.btn_fit, self.btn_zoom_in, self.btn_zoom_out):
+            b.clicked.connect(self._focus_from_control)
+        c.rangeSelected.connect(self._range_selected)
+        c.rangeCleared.connect(self.clear_range)
+        c.loopKeyRequested.connect(self.btn_loop.toggle)
+        self._beat_bar: List[int] = []          # bar number of every beat
+        self._beat_pos: List[int] = []          # beat number inside its bar
 
         # safeguard: toolbar controls never keep the keyboard, so arrow keys meant for the
         # timeline cannot change the speed, audio mode, volume... by accident
@@ -175,6 +239,105 @@ class TimelinePanel(QWidget):
         sc.setContext(Qt.WidgetWithChildrenShortcut)
         sc.activated.connect(self.toggle_play)
 
+    # ------------------------------------------------------------------ focus
+    def focus_timeline(self):
+        self.view.canvas.setFocus(Qt.MouseFocusReason)
+
+    def _focus_from_control(self, *_):
+        if self.click_focus:
+            self.focus_timeline()
+
+    def eventFilter(self, obj, ev):
+        from PySide6.QtCore import QEvent
+        if ev.type() == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
+            if obj in (self.preview, self.overview, self.time_label, self.sub_counter):
+                self._focus_from_control()
+            elif obj in (self.line_start, self.line_end, self.line_len):
+                self._clock_clicked(obj)
+                return True
+        return super().eventFilter(obj, ev)
+
+    # ------------------------------------------------------------------ range / loop
+    def current_range(self, t: Optional[float] = None):
+        """(start, end) of the selected range, else of the lyric line at the playhead, else None."""
+        c = self.view.canvas
+        if c.selection is not None:
+            return c.selection
+        t = self.chart_time() if t is None else t
+        ai = self._active_index(t)
+        ln = c._line_of(ai) if ai >= 0 else None
+        if ln is None or (t > ln.end + 0.5 and ai + 1 >= len(self.entries)):
+            return None
+        return (ln.start, ln.end)
+
+    def set_range(self, a: float, b: float, auto: bool = False):
+        c = self.view.canvas
+        c.selection = (min(a, b), max(a, b))
+        self._auto_range = auto
+        c.update()
+        self._show_readouts(self.chart_time())
+
+    def clear_range(self):
+        c = self.view.canvas
+        c.selection = None
+        self._auto_range = False
+        if self.btn_loop.isChecked():
+            self.btn_loop.setChecked(False)
+        c.update()
+        self._show_readouts(self.chart_time())
+
+    def _range_selected(self, a: float, b: float):
+        self.set_range(a, b)
+
+    def _loop_toggled(self, on: bool):
+        c = self.view.canvas
+        if on and c.selection is None:
+            rng = self.current_range()
+            if rng is None:
+                self.btn_loop.setChecked(False)
+                self.window().statusBar().showMessage("Loop: select a range (Shift + drag in the timeline) or "
+                                                      "move the playhead onto a lyric line first.", 5000)
+                return
+            self.set_range(*rng, auto=True)
+        c.loop_on = on
+        if not on and self._auto_range:
+            c.selection = None
+            self._auto_range = False
+        c.update()
+        self._show_readouts(self.chart_time())
+
+    def _clock_clicked(self, lab):
+        rng = self.current_range()
+        self._focus_from_control()
+        if rng is None:
+            return
+        a, b = rng
+        if lab is self.line_start:
+            self.navigate(a)
+        elif lab is self.line_end:
+            self.navigate(b)
+        else:                                   # Length: play the range (once, unless Loop is on)
+            self.seek_chart(a)
+            self.view.ensure_visible_time(a, page=False)
+            self._play_until = None if self.btn_loop.isChecked() else b
+            if self.player.loaded and not self.player.playing:
+                self.toggle_play()
+            elif not self.player.loaded:
+                self._try_play_without_audio()
+
+    @staticmethod
+    def _lcd(name: str, tip: str) -> QLabel:
+        lab = QLabel("")
+        lab.setObjectName(name)
+        lab.setToolTip(tip)
+        lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        f = lab.font()
+        f.setFamily("Consolas" if os.name == "nt" else "Menlo")
+        f.setStyleHint(f.StyleHint.Monospace)
+        f.setBold(True)
+        lab.setFont(f)
+        return lab
+
     # ------------------------------------------------------------------ data
     def set_project(self, beatmap: Optional[Beatmap], entries: List[VocalEntry], reference: List[VocalEntry],
                     silence_end: float, bars_end: float, song_shift: float):
@@ -183,6 +346,15 @@ class TimelinePanel(QWidget):
         self.song_shift = song_shift
         self.view.canvas.set_data(beatmap, self.entries, reference, silence_end, bars_end)
         self.preview.set_entries(self.entries)
+        self._beat_bar, self._beat_pos = [], []
+        if beatmap and beatmap.beats:
+            bar, pos = 0, 0
+            for k, is_m in enumerate(beatmap.measure_flags):
+                if is_m or k == 0:
+                    bar, pos = bar + 1, 0
+                pos += 1
+                self._beat_bar.append(bar)
+                self._beat_pos.append(pos)
         self._fill_sections()
         self.overview.update()
         self._update_shift()
@@ -196,13 +368,51 @@ class TimelinePanel(QWidget):
         c.accent = QColor(color)
         c.wave_color = QColor(colors["wave"]) if colors.get("wave") else None
         c.playhead_color = QColor(colors.get("playhead", "#ff4d4d"))
+        c.daw = colors if colors.get("style") == "daw" else None
+        c.ROW_RULER = 32 if c.daw else type(c).ROW_RULER      # room for two stacked rulers
+        c._resize()
         c.update()
-        if colors.get("clock_bg"):
-            self.time_label.setStyleSheet(f"background: {colors['clock_bg']}; color: {colors['clock_fg']}; "
-                                          "border-radius: 4px; padding: 2px 8px;")
-        else:
-            self.time_label.setStyleSheet("padding: 2px 8px;")
+        self.transport_bar.layout().setContentsMargins(*((2, 2, 2, 2) if c.daw else (0, 0, 0, 0)))
+        self.nav_bar.layout().setContentsMargins(*((2, 2, 2, 2) if c.daw else (0, 0, 0, 0)))
+        self.view.overlay.update()
+        self.overview.update()
+        self.style_counters(colors)
         self._show_focus(self.view.canvas.hasFocus())
+
+    def _style_range_clocks(self):
+        """Start / End / Length get an accent frame while they show a selected range (not just the line)."""
+        bg, fg, edge, acc = self._lcd_colors
+        frame = acc if getattr(self, "_range_shown", False) else edge
+        for lab in (self.line_start, self.line_end, self.line_len):
+            lab.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {frame}; border-radius: 2px; "
+                              "padding: 1px 6px;")
+
+    def style_counters(self, colors: dict):
+        """Edit-window counters: green (or the theme's clock colour) digits on a black LCD, in every theme."""
+        from PySide6.QtGui import QFontMetrics
+        bg = colors.get("clock_bg") or "#0b0c0d"
+        fg = colors.get("clock_fg") or "#3fe06a"
+        edge = colors.get("border") or "#000000"
+        base = self._clock_pt
+        for lab, scale, pad, sample in ((self.time_label, 1.75, "2px 8px", "00:00.000"),
+                                        (self.sub_counter, 1.25, "1px 10px", "000| 0| 000"),
+                                        (self.line_start, 1.0, "1px 6px", "0:00.000"),
+                                        (self.line_end, 1.0, "1px 6px", "0:00.000"),
+                                        (self.line_len, 1.0, "1px 6px", "0:00.000"),
+                                        (self.tempo_lcd, 1.0, "1px 6px", "♩ 000.0"),
+                                        (self.meter_lcd, 1.0, "1px 6px", "00/00")):
+            f = lab.font()
+            f.setPointSizeF(base * scale)
+            lab.setFont(f)
+            lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lab.setMinimumWidth(QFontMetrics(f).horizontalAdvance(sample) + (26 if scale > 1 else 16))
+            lab.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {edge}; border-radius: 2px; "
+                              f"padding: {pad};")
+        acc = colors.get("accent") or "#3b82d6"
+        if acc.lower() == edge.lower():           # e.g. Lyridan Dark: yellow frames already
+            acc = "#ffffff"
+        self._lcd_colors = (bg, fg, edge, acc)
+        self._style_range_clocks()
 
     def choose_audio(self):
         start = os.path.dirname(self.player.path) if self.player.path else ""
@@ -220,6 +430,7 @@ class TimelinePanel(QWidget):
                 QMessageBox.warning(self, "Lyridan", f"Could not load the audio:\n{e}")
             return False
         self.audio_label.setText(os.path.basename(path))
+        self.view.canvas.clip_name = os.path.splitext(os.path.basename(path))[0]
         self.audio_label.setToolTip(path)
         self.audio_label.setStyleSheet("")
         self.btn_audio.setText("🎵 Audio…")
@@ -236,6 +447,7 @@ class TimelinePanel(QWidget):
         if self._timer.isActive():
             self._timer.stop()
         self.player.unload()
+        self.view.canvas.clip_name = ""
         self.btn_play.setText("▶ Play")
         self._no_audio_label()
         self._update_shift()
@@ -357,7 +569,8 @@ class TimelinePanel(QWidget):
             self.focus_label.setStyleSheet(f"background: {acc.name()}; color: {text}; font-weight: bold; "
                                            "border-radius: 4px; padding: 3px 8px;")
         else:
-            self.focus_label.setText("Click the timeline to use keys")
+            self.focus_label.setText("Click the timeline, preview or overview to use keys" if self.click_focus
+                                     else "Click the timeline to use keys")
             self.focus_label.setStyleSheet("padding: 3px 8px;")
 
     def set_navigation(self, arrow_step: str, accelerate: bool):
@@ -379,6 +592,18 @@ class TimelinePanel(QWidget):
 
     def _tick(self):
         t = self.chart_time()
+        if self.player.playing:
+            rng = self.view.canvas.selection
+            if self.btn_loop.isChecked() and rng and self._prev_t < rng[1] <= t and t - self._prev_t < 0.3:
+                self.seek_chart(rng[0])            # crossed the end of the loop: back to its start
+                return
+            if self._play_until is not None and t >= self._play_until:
+                self._play_until = None
+                self.toggle_play()                 # Length click: stop at the end of the range
+                return
+        else:
+            self._play_until = None
+        self._prev_t = t
         if self.player.loaded and not self.player.playing and self._timer.isActive():
             self._timer.stop()
             self.btn_play.setText("▶ Play")
@@ -398,6 +623,43 @@ class TimelinePanel(QWidget):
         m, s = divmod(max(0.0, t), 60)
         self.time_label.setText(f"{int(m)}:{s:06.3f}")
         self.time_label.setToolTip("Chart time (as in the exported XML)")
+        self._show_readouts(t)
+
+    def _show_readouts(self, t: float):
+        """Bars|Beats sub counter, current line start/end/length, tempo and meter (display only)."""
+        bm = self.beatmap
+        beats = bm.beats if bm else []
+        k = bisect.bisect_right(beats, t) - 1 if beats else -1
+        if 0 <= k < len(self._beat_bar):
+            nxt = beats[k + 1] if k + 1 < len(beats) else beats[k] + (beats[k] - beats[k - 1] if k else 0.5)
+            span = max(1e-6, nxt - beats[k])
+            tick = int(min(959, (t - beats[k]) / span * 960))
+            self.sub_counter.setText(f"{self._beat_bar[k]:>3}| {self._beat_pos[k]}| {tick:03d}")
+            self.tempo_lcd.setText(f"♩ {60.0 / span:.1f}")
+            j = k + 1                                   # beats in this bar = last beat number before the next bar
+            while j < len(self._beat_bar) and self._beat_bar[j] == self._beat_bar[k]:
+                j += 1
+            den = 4
+            for ts_t, _num, ts_den in (bm.ts_events or []):
+                if ts_t <= t + 1e-6 and ts_den:
+                    den = ts_den
+            self.meter_lcd.setText(f"{self._beat_pos[j - 1]}/{den}")
+        else:
+            self.sub_counter.setText("  0| 0| 000")
+            self.tempo_lcd.setText("♩ —")
+            self.meter_lcd.setText("—")
+        rng = self.current_range(t)
+        if rng is None:
+            for lab in (self.line_start, self.line_end, self.line_len):
+                lab.setText("—")
+        else:
+            self.line_start.setText(_clock(rng[0]))
+            self.line_end.setText(_clock(rng[1]))
+            self.line_len.setText(_clock(rng[1] - rng[0]))
+        has_range = self.view.canvas.selection is not None
+        if has_range != getattr(self, "_range_shown", None) and getattr(self, "_lcd_colors", None):
+            self._range_shown = has_range
+            self._style_range_clocks()
 
     def shutdown(self):
         self._timer.stop()

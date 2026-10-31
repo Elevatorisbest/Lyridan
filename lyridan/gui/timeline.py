@@ -127,6 +127,9 @@ class TimelineCanvas(QWidget):
     fitRequested = Signal()
     leaveRequested = Signal()              # Esc: give the keyboard back to the rest of the window
     focusChanged = Signal(bool)
+    rangeSelected = Signal(float, float)   # Shift + drag: a play / loop range (chart seconds)
+    rangeCleared = Signal()                # Shift + click without dragging
+    loopKeyRequested = Signal()            # L
 
     ROW_RULER = 26
     ROW_SECTIONS = 20
@@ -155,6 +158,10 @@ class TimelineCanvas(QWidget):
         self.accent = QColor("#46a758")
         self.wave_color: Optional[QColor] = None      # theme colour for the waveform (None = text colour)
         self.playhead_color = QColor("#ff4d4d")       # playhead + the syllable being sung (contrasts the accent)
+        self.daw: Optional[dict] = None               # DAW-style theme colours (rulers, clips, lanes) or None
+        self.clip_name = ""                           # audio file name shown on the waveform clip (DAW style)
+        self.selection: Optional[Tuple[float, float]] = None   # play / loop range, drawn over the tracks
+        self.loop_on = False
         self.active_index = -1
         self.arrow_step = "beat"
         self.accelerate = True
@@ -273,25 +280,40 @@ class TimelineCanvas(QWidget):
         fg = pal.text().color()
         dark = bg.lightness() < 128
         r = ev.rect()
+        d = self.daw
+        if d:
+            bg = QColor(d["text_bg"])
         p.fillRect(r, bg)
         t0, t1 = self.t_at(r.left()) - 1, self.t_at(r.right()) + 1
         h = self.height()
         rows = self.rows()
+        rulers_h = self.ROW_RULER + self.ROW_SECTIONS      # ruler + markers lanes
 
-        # alternate row shading so the rows are easy to tell apart
-        shade = QColor(fg)
-        shade.setAlpha(9)
-        for name in ("sections", "notes", "sylls", "ref_sylls"):
-            if name in rows:
-                y, rh = rows[name]
-                p.fillRect(QRectF(r.left(), y, r.width(), rh), shade)
+        if d:
+            # DAW look: rulers on their own lighter strip, tracks separated by dark lane lines
+            p.fillRect(QRectF(r.left(), 0, r.width(), rulers_h), QColor(d["ruler_bg"]))
+            lane = QColor(d["lane_line"])
+            for name, (y, rh) in rows.items():
+                if name in ("lines", "ref_lines"):        # a track's lines + syllables form one lane
+                    continue
+                p.fillRect(QRectF(r.left(), y + rh - 1, r.width(), 1), lane)
+        else:
+            # alternate row shading so the rows are easy to tell apart
+            shade = QColor(fg)
+            shade.setAlpha(9)
+            for name in ("sections", "notes", "sylls", "ref_sylls"):
+                if name in rows:
+                    y, rh = rows[name]
+                    p.fillRect(QRectF(r.left(), y, r.width(), rh), shade)
 
         # intro silence / empty bars
+        top = rulers_h if d else 0
         if self.silence_end > 0:
-            p.fillRect(QRectF(self.x(0), 0, self.silence_end * self.pps, h), QColor(229, 72, 77, 34 if dark else 22))
+            p.fillRect(QRectF(self.x(0), top, self.silence_end * self.pps, h - top),
+                       QColor(229, 72, 77, (22 if dark else 18) if d else (34 if dark else 22)))
         if self.bars_end > self.silence_end:
-            p.fillRect(QRectF(self.x(self.silence_end), 0, (self.bars_end - self.silence_end) * self.pps, h),
-                       QColor(245, 165, 36, 34 if dark else 26))
+            p.fillRect(QRectF(self.x(self.silence_end), top, (self.bars_end - self.silence_end) * self.pps, h - top),
+                       QColor(245, 165, 36, (22 if dark else 20) if d else (34 if dark else 26)))
 
         small = QFont(self.font())
         small.setPointSizeF(max(7.0, small.pointSizeF() - 1.5))
@@ -304,9 +326,16 @@ class TimelineCanvas(QWidget):
         lab = QColor(fg)
         lab.setAlpha(140)
 
-        ruler_bg = QColor(fg)
-        ruler_bg.setAlpha(16)
-        p.fillRect(QRectF(r.left(), 0, r.width(), self.ROW_RULER), ruler_bg)
+        if d:
+            grid_c = QColor(d["grid_beat"])
+            bar_c = QColor(d["grid_bar"])
+            lab = QColor(d["ruler_fg"])
+            half = self.ROW_RULER // 2                  # Bars|Beats on top, Min:Secs underneath
+            p.fillRect(QRectF(r.left(), half, r.width(), 1), QColor(d["lane_line"]))
+        else:
+            ruler_bg = QColor(fg)
+            ruler_bg.setAlpha(16)
+            p.fillRect(QRectF(r.left(), 0, r.width(), self.ROW_RULER), ruler_bg)
 
         bm = self.beatmap
         if bm and bm.beats:
@@ -324,7 +353,22 @@ class TimelineCanvas(QWidget):
                 if t < t0 or t > t1:
                     continue
                 X = self.x(t)
-                if is_m:
+                if d:
+                    if is_m:
+                        p.setPen(QPen(bar_c, 1))
+                        p.drawLine(QPointF(X, rulers_h), QPointF(X, h))
+                        p.setPen(QPen(lab, 1))
+                        p.drawLine(QPointF(X, 1), QPointF(X, half - 1))
+                        if (mnum - 1) % every == 0:
+                            p.setFont(bold)
+                            p.drawText(QPointF(X + 3, half - 3), str(mnum))
+                            p.setFont(small)
+                    elif self.pps * mlen / 4 > 6:
+                        p.setPen(QPen(grid_c, 1))
+                        p.drawLine(QPointF(X, rulers_h), QPointF(X, h))
+                        p.setPen(QPen(bar_c, 1))
+                        p.drawLine(QPointF(X, half - 4), QPointF(X, half - 1))
+                elif is_m:
                     p.setPen(QPen(bar_c, 1))
                     p.drawLine(QPointF(X, 2), QPointF(X, h))
                     if (mnum - 1) % every == 0:
@@ -346,14 +390,16 @@ class TimelineCanvas(QWidget):
             p.drawText(QPointF(X + 3, self.ROW_RULER - 4), f"{m}:{sec:02d}")
             s += step
 
-        # sections: coloured blocks with their names
+        # sections: coloured blocks with their names (DAW look: a marker ruler)
         y, rh = rows["sections"]
         sec_font = QFont(small)
         sec_font.setBold(True)
         sfm = QFontMetrics(sec_font)
         p.setFont(sec_font)
         vis_left = self.visibleRegion().boundingRect().left() + GUTTER
-        for sct in self.sections:
+        if d:
+            self._draw_markers(p, y, rh, t0, t1, sfm, vis_left)
+        for sct in ([] if d else self.sections):
             if sct.end < t0 or sct.start > t1:
                 continue
             a, b = self.x(sct.start), self.x(sct.end)
@@ -375,6 +421,8 @@ class TimelineCanvas(QWidget):
             amp = rh / 2 - 4
             wc = QColor(self.wave_color) if self.wave_color is not None else QColor(fg)
             wc.setAlpha(170 if self.wave_color is not None else 110)
+            if d:
+                y0, mid, amp, wc = self._draw_audio_clip(p, y0, rh, bg, small)
             a_t0 = max(0.0, t0 - self.audio_shift)
             a_t1 = max(0.0, t1 - self.audio_shift)
             i0 = int(a_t0 * self.peaks_bps)
@@ -396,7 +444,13 @@ class TimelineCanvas(QWidget):
                     p.drawLine(QPointF(last_c, mid - hi * amp), QPointF(last_c, mid - lo * amp))
 
         # chart notes (one lane per string)
-        y_notes, _ = rows["notes"]
+        y_notes, nh = rows["notes"]
+        if d and bm and bm.notes:
+            a = self.x(bm.notes[0][0])
+            b = self.x(max(t + sus for t, sus, _ in bm.notes))
+            body = QColor(d["notes_clip"])
+            body.setAlpha(38)
+            p.fillRect(QRectF(a - 2, y_notes + 1, b - a + 4, nh - 3), body)
         if bm:
             for t, sus, string in bm.notes:
                 if t + sus < t0 or t > t1:
@@ -411,11 +465,26 @@ class TimelineCanvas(QWidget):
             self._draw_vocals(p, self.reference, self.ref_lines, rows["ref_lines"], rows["ref_sylls"], REF_COLOR,
                               t0, t1, small, False)
 
+        # play / loop range
+        if self.selection is not None:
+            a, b = self.selection
+            if b >= t0 and a <= t1:
+                xa, xb = self.x(a), self.x(b)
+                sel = QColor(d["select_bg"] if d else self.palette().highlight().color())
+                sel.setAlpha(70)
+                top = rulers_h
+                p.fillRect(QRectF(xa, top, xb - xa, h - top), sel)
+                band = QColor(self.accent if not self.loop_on else self.playhead_color)
+                p.fillRect(QRectF(xa, top - 4, xb - xa, 4), band)
+                p.setPen(QPen(band, 1))
+                p.drawLine(QPointF(xa, top - 4), QPointF(xa, h))
+                p.drawLine(QPointF(xb, top - 4), QPointF(xb, h))
+
         # playhead
         if self.playhead is not None and t0 <= self.playhead <= t1:
             X = self.x(self.playhead)
             ph = QColor(self.playhead_color)
-            p.setPen(QPen(ph, 2))
+            p.setPen(QPen(ph, 1.5 if d else 2))
             p.drawLine(QPointF(X, 0), QPointF(X, h))
             p.setBrush(ph)
             p.setPen(Qt.NoPen)
@@ -425,6 +494,7 @@ class TimelineCanvas(QWidget):
     def _draw_vocals(self, p: QPainter, entries: List[VocalEntry], lines: List[LyricLine], line_row, syl_row,
                      color: QColor, t0, t1, font, live: bool):
         fg = self.palette().text().color()
+        d = self.daw
         fm = QFontMetrics(font)
         active_line = self._line_of(self.active_index) if live and self.active_index >= 0 else None
         # --- lines: one block per Rocksmith line, with the whole line as text
@@ -440,14 +510,21 @@ class TimelineCanvas(QWidget):
             a, b = self.x(ln.start), self.x(ln.end)
             c = QColor(color)
             is_active = active_line is not None and ln.first == active_line.first
-            c.setAlpha(150 if is_active else (70 if n % 2 == 0 else 45))
             path = QPainterPath()
-            path.addRoundedRect(QRectF(a, ly + 3, max(4.0, b - a), lh - 6), 4, 4)
-            p.fillPath(path, c)
+            if d:                                      # a clip: solid body, darker outline, dark name text
+                c = c.lighter(118) if is_active else (c if n % 2 == 0 else c.darker(112))
+                path.addRoundedRect(QRectF(a + 0.5, ly + 1.5, max(4.0, b - a - 1), lh - 3), 2, 2)
+                p.fillPath(path, c)
+                p.setPen(QPen(QColor(d["lane_line"]) if not is_active else QColor(self.playhead_color), 1))
+                p.drawPath(path)
+            else:
+                c.setAlpha(150 if is_active else (70 if n % 2 == 0 else 45))
+                path.addRoundedRect(QRectF(a, ly + 3, max(4.0, b - a), lh - 6), 4, 4)
+                p.fillPath(path, c)
             ta = max(a, min(vis_left, b - 60))          # keep the start of the text in view
             txt = bfm.elidedText(ln.text, Qt.ElideRight, int(b - ta - 8))
             if b - ta > 24:
-                p.setPen(fg)
+                p.setPen(QColor(d["clip_text"]) if d else fg)
                 p.drawText(QRectF(ta + 5, ly + 3, b - ta - 8, lh - 6), Qt.AlignVCenter | Qt.AlignLeft, txt)
         p.setFont(font)
         # --- syllables: a bar per syllable, text underneath (only when it fits, never overlapping)
@@ -468,8 +545,14 @@ class TimelineCanvas(QWidget):
             c = QColor(self.playhead_color) if active else QColor(color)
             c.setAlpha(255 if active else 200)
             path = QPainterPath()
-            path.addRoundedRect(QRectF(X, bar_y, w, bar_h), 2.5, 2.5)
-            p.fillPath(path, c)
+            if d:
+                path.addRoundedRect(QRectF(X + 0.5, bar_y + 0.5, w - 1, bar_h), 1.5, 1.5)
+                p.fillPath(path, c)
+                p.setPen(QPen(QColor(d["lane_line"]), 1))
+                p.drawPath(path)
+            else:
+                path.addRoundedRect(QRectF(X, bar_y, w, bar_h), 2.5, 2.5)
+                p.fillPath(path, c)
             lyr = e.lyric
             core = lyr[:-1] if lyr.endswith("+") else lyr
             if core.endswith("-") and i + 1 < len(entries):     # same word continues: connect the bars
@@ -486,6 +569,66 @@ class TimelineCanvas(QWidget):
                 if txt and txt != "…":
                     p.setPen(QColor(self.playhead_color) if active else fg)
                     p.drawText(QPointF(X + 1, bar_y + bar_h + 13), txt)
+
+    # ------------------------------------------------------------------ DAW-style helpers
+    def _draw_markers(self, p: QPainter, y: float, rh: float, t0: float, t1: float, sfm: QFontMetrics,
+                      vis_left: float):
+        """Sections as a marker ruler: a coloured flag at each start, the name beside it and a thin
+        coloured strip along the bottom showing how far the section runs."""
+        d = self.daw
+        outline = QColor(d["lane_line"])
+        text = QColor(d["ruler_fg"])
+        for sct in self.sections:
+            if sct.end < t0 or sct.start > t1:
+                continue
+            a, b = self.x(sct.start), self.x(sct.end)
+            c = QColor(sct.color)
+            strip = QColor(c)
+            strip.setAlpha(110)
+            p.fillRect(QRectF(a, y + rh - 5, b - a - 1, 3), strip)
+            p.setPen(QPen(c.darker(150), 1))
+            p.drawLine(QPointF(a, y + 2), QPointF(a, y + rh - 2))
+            flag = QPolygonF([QPointF(a, y + 2), QPointF(a + 9, y + 2), QPointF(a + 9, y + 9),
+                              QPointF(a + 4.5, y + 13), QPointF(a, y + 9)])
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setBrush(c)
+            p.setPen(QPen(outline, 1))
+            p.drawPolygon(flag)
+            p.setRenderHint(QPainter.Antialiasing, False)
+            p.setBrush(Qt.NoBrush)
+            ta = max(a, min(vis_left, b - sfm.horizontalAdvance(sct.label) - 16))   # label sticks to the left
+            txt = sfm.elidedText(sct.label, Qt.ElideRight, int(b - ta - 16))
+            p.setPen(text)
+            p.drawText(QRectF(ta + 12, y, b - ta - 14, rh - 4), Qt.AlignVCenter | Qt.AlignLeft, txt)
+
+    def _draw_audio_clip(self, p: QPainter, y0: float, rh: float, bg: QColor, font: QFont):
+        """Draws the audio as one clip (body, outline, name bar along the bottom) and returns the
+        geometry for the waveform inside it: (top, middle, amplitude, waveform colour)."""
+        d = self.daw
+        col = QColor(self.wave_color) if self.wave_color is not None else QColor(self.accent)
+        start = self.audio_shift
+        end = self.audio_shift + len(self.peaks) / self.peaks_bps
+        a, b = self.x(max(0.0, start)), self.x(end)
+        name_h = 11
+        body = QColor(
+            int(bg.red() * 0.8 + col.red() * 0.2), int(bg.green() * 0.8 + col.green() * 0.2),
+            int(bg.blue() * 0.8 + col.blue() * 0.2))
+        rect = QRectF(a + 0.5, y0 + 1.5, b - a - 1, rh - 4)
+        p.fillRect(rect, body)
+        p.fillRect(QRectF(rect.left(), rect.bottom() - name_h, rect.width(), name_h), col)
+        p.setPen(QPen(QColor(d["lane_line"]), 1))
+        p.drawRect(rect)
+        if self.clip_name:
+            vis_left = self.visibleRegion().boundingRect().left() + GUTTER
+            fm = QFontMetrics(font)
+            ta = max(a, min(vis_left, b - fm.horizontalAdvance(self.clip_name) - 10))
+            p.setPen(QColor("#000000") if col.lightness() > 140 else QColor("#ffffff"))
+            p.drawText(QRectF(ta + 4, rect.bottom() - name_h, b - ta - 8, name_h), Qt.AlignVCenter | Qt.AlignLeft,
+                       fm.elidedText(self.clip_name, Qt.ElideRight, int(max(0, b - ta - 8))))
+        wave_top = y0 + 2
+        wave_h = rh - 4 - name_h - 1
+        wc = QColor(col) if bg.lightness() < 128 else col.darker(140)
+        return wave_top, wave_top + wave_h / 2, wave_h / 2 - 2, wc
 
     # ------------------------------------------------------------------ hit tests
     def _row_at(self, y: float) -> str:
@@ -536,6 +679,12 @@ class TimelineCanvas(QWidget):
             return
         if ev.button() != Qt.LeftButton:
             return
+        if ev.modifiers() & Qt.ShiftModifier:          # Shift + drag: select a play / loop range
+            t = max(0.0, self.t_at(pos.x()))
+            self._drag = ("select", t)
+            self.selection = None                     # a Shift + click without dragging clears the range
+            self.update()
+            return
         sct = self._section_hit(pos)
         if sct is not None:
             self.seekRequested.emit(sct.start)
@@ -564,6 +713,12 @@ class TimelineCanvas(QWidget):
             sa = self._scroll_area()
             if sa:
                 sa.horizontalScrollBar().setValue(int(self._drag[2] - (ev.globalPosition().x() - self._drag[1])))
+            return
+        if self._drag and self._drag[0] == "select" and ev.buttons() & Qt.LeftButton:
+            t = max(0.0, self.t_at(ev.position().x()))
+            a, b = sorted((self._drag[1], t))
+            self.selection = (a, b) if b - a > 0.02 else None
+            self.update()
             return
         if self._drag and self._drag[0] == "scrub" and ev.buttons() & Qt.LeftButton:
             self.seekRequested.emit(max(0.0, self.t_at(ev.position().x())))
@@ -598,7 +753,19 @@ class TimelineCanvas(QWidget):
     def mouseReleaseEvent(self, ev):
         if self._drag and self._drag[0] == "pan":
             self.unsetCursor()
+        if self._drag and self._drag[0] == "select":
+            if self.selection is not None:
+                self.rangeSelected.emit(*self.selection)
+            else:
+                self.rangeCleared.emit()
         self._drag = None
+
+    def event(self, ev):
+        from PySide6.QtCore import QEvent
+        if ev.type() == QEvent.KeyPress and ev.key() in (Qt.Key_Tab, Qt.Key_Backtab):
+            ev.accept()          # Tab never moves the keyboard from the timeline into the settings
+            return True
+        return super().event(ev)
 
     def _scroll_area(self) -> Optional["TimelineView"]:
         w = self.parentWidget()
@@ -683,6 +850,8 @@ class TimelineCanvas(QWidget):
             self.playLineRequested.emit(ln.start if ln else t)
         elif key == Qt.Key_F and not mods:
             self.fitRequested.emit()
+        elif key == Qt.Key_L and not mods:
+            self.loopKeyRequested.emit()
         elif key == Qt.Key_Escape:
             self.leaveRequested.emit()
         else:
@@ -742,6 +911,10 @@ class _Overlay(QWidget):
         fg = pal.text().color()
         c = self.view.canvas
         dy = -self.view.verticalScrollBar().value()
+        if c.daw:
+            self._paint_daw(p, c, dy)
+            p.end()
+            return
         p.fillRect(QRectF(0, 0, GUTTER, self.height()), bg)
         sep = QColor(fg)
         sep.setAlpha(40)
@@ -769,6 +942,59 @@ class _Overlay(QWidget):
             p.drawRect(QRectF(1, 1, self.width() - 2, self.height() - 2))
         p.end()
 
+    def _paint_daw(self, p: QPainter, c: "TimelineCanvas", dy: float):
+        """Ruler names right-aligned on the ruler strip; every other row gets a track header with a
+        colour strip and a recessed name plate."""
+        d = c.daw
+        lane = QColor(d["lane_line"])
+        p.fillRect(QRectF(0, 0, GUTTER, self.height()), QColor(d["header_bg"]))
+        f = QFont(self.font())
+        f.setPointSizeF(max(7.0, f.pointSizeF() - 1.5))
+        p.setFont(f)
+        rows = c.rows()
+        colors = {"wave": c.wave_color or c.accent, "notes": QColor(d["notes_clip"]), "lines": c.accent,
+                  "sylls": c.accent, "ref_lines": REF_COLOR, "ref_sylls": REF_COLOR}
+        titles = dict(ROW_TITLES, wave="Audio", notes="Chart notes", lines="Vocals", ref_lines="Reference")
+        for name, (y, h) in rows.items():
+            y += dy
+            if name in ("ruler", "sections"):
+                p.fillRect(QRectF(0, y, GUTTER, h), QColor(d["ruler_bg"]))
+                p.setPen(QColor(d["ruler_fg"]))
+                if name == "ruler":
+                    half = h // 2
+                    p.drawText(QRectF(4, y, GUTTER - 10, half), Qt.AlignVCenter | Qt.AlignRight, "Bars|Beats")
+                    p.drawText(QRectF(4, y + half, GUTTER - 10, h - half), Qt.AlignVCenter | Qt.AlignRight,
+                               "Min:Secs")
+                    p.fillRect(QRectF(0, y + half, GUTTER, 1), lane)
+                else:
+                    p.drawText(QRectF(4, y, GUTTER - 10, h), Qt.AlignVCenter | Qt.AlignRight, "Markers")
+                p.fillRect(QRectF(0, y + h - 1, GUTTER, 1), lane)
+                continue
+            if name in ("sylls", "ref_sylls"):         # second half of a vocal track: no separate plate
+                p.fillRect(QRectF(0, y, 5, h), colors[name])
+                sub = QColor(d["muted"])
+                p.setPen(sub)
+                p.drawText(QRectF(10, y, GUTTER - 16, h), Qt.AlignVCenter | Qt.AlignLeft,
+                           "syllables" if name == "sylls" else "ref. syllables")
+                p.fillRect(QRectF(0, y + h - 1, GUTTER, 1), lane)
+                continue
+            p.fillRect(QRectF(0, y, 5, h), colors.get(name, c.accent))     # track colour strip
+            plate = QRectF(9, y + 3, GUTTER - 15, min(16, h - 6))
+            p.setPen(QPen(lane, 1))
+            p.setBrush(QColor(d["entry_bg"]))
+            p.drawRoundedRect(plate, 2, 2)
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QColor(d["fg"]))
+            p.drawText(plate.adjusted(5, 0, -3, 0), Qt.AlignVCenter | Qt.AlignLeft,
+                       QFontMetrics(f).elidedText(titles.get(name, name), Qt.ElideRight, int(plate.width() - 8)))
+            if name not in ("lines", "ref_lines"):
+                p.fillRect(QRectF(0, y + h - 1, GUTTER, 1), lane)
+        p.fillRect(QRectF(GUTTER - 1, 0, 1, self.height()), lane)
+        if self.focused:
+            p.setPen(QPen(QColor(d["accent"]), 2))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(QRectF(1, 1, self.width() - 2, self.height() - 2))
+
 
 class TimelineView(QScrollArea):
     def __init__(self, parent=None):
@@ -789,7 +1015,7 @@ class TimelineView(QScrollArea):
         c = self.canvas
         r = c.visibleRegion().boundingRect()
         rows = c.rows()
-        for name in ("sections", "lines", "ref_lines"):
+        for name in ("sections", "lines", "ref_lines", "wave"):
             if name in rows:
                 y, h = rows[name]
                 c.update(r.left(), y, r.width(), h)
@@ -885,6 +1111,8 @@ class OverviewBar(QWidget):
         pal = self.palette()
         fg = pal.text().color()
         bg = pal.base().color()
+        if c.daw:                                      # "universe" strip: recessed, framed
+            bg = QColor(c.daw["entry_bg"])
         p.fillRect(self.rect(), bg)
         h = self.height()
         for s in c.sections:
@@ -905,6 +1133,8 @@ class OverviewBar(QWidget):
             p.fillRect(QRectF(self._x(ln.start), h - 9, max(1.5, self._x(ln.end) - self._x(ln.start)), 5), acc)
         a, b = self.view.visible_range()
         win = QColor(fg)
+        if c.daw:
+            win = QColor(c.daw["select_fg"])
         win.setAlpha(40)
         p.fillRect(QRectF(self._x(a), 0, max(3.0, self._x(b) - self._x(a)), h), win)
         win.setAlpha(150)
@@ -914,6 +1144,9 @@ class OverviewBar(QWidget):
             p.setPen(QPen(QColor(c.playhead_color), 2))
             X = self._x(c.playhead)
             p.drawLine(QPointF(X, 0), QPointF(X, h))
+        if c.daw:
+            p.setPen(QPen(QColor(c.daw["lane_line"]), 1))
+            p.drawRect(QRectF(0, 0, self.width() - 1, h - 1))
         p.end()
 
     def mousePressEvent(self, ev):
@@ -944,7 +1177,10 @@ SHORTCUTS_HTML = """
 <tr><td><b>↑ ↓</b></td><td>zoom in / out</td></tr>
 <tr><td><b>Space</b> · <b>Enter</b></td><td>play / pause · play the current line</td></tr>
 <tr><td><b>F</b></td><td>fit the whole song</td></tr>
+<tr><td><b>L</b></td><td>loop on / off (repeats the range, or the current line)</td></tr>
 </table>
+<b>Range</b>: Shift + drag = select a range (the Start / End / Length clocks show it; Shift + click clears it).
+Click <b>Start</b> / <b>End</b> to jump there, <b>Length</b> to play the range.<br>
 <b>Mouse</b>: click = move the playhead (drag to scrub) · click a section = jump to it ·
 double-click a lyric line = play it · wheel = scroll (Shift = faster) · Ctrl + wheel = zoom ·
 right/middle-drag = pan · the overview strip above shows the whole song: click or drag it to look somewhere else.
