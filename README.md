@@ -7,7 +7,11 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 **Editor on Fire** or **Charter**, where you check and fine-tune it before it goes into your CDLC.
 
 > Lyridan is a charting **assistant**, not a replacement for hand-made vocals. Always check the result
-> by ear before publishing.
+> by ear before publishing and abide by the Charting Guidelines.
+>
+> Lyridan is also **Claude-coded**. Elevatorisbest at no point claims that they are a coder/programmer, so please keep that in mind.
+>
+> Outside of code, generative AI was used strictly for made up lyrics in the Theme screenshots as well as formatting and information in this readme, which has been checked by the repo author. Elevatorisbest does **not** support or endorse generative AI outside of coding (hence the look of the logo, I made it on my own with my own hands).
 
 **Contents:**
 [Quick start](#quick-start) ·
