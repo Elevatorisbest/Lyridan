@@ -12,6 +12,7 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 **Contents:**
 [Quick start](#quick-start) ·
 [Features](#features) ·
+[The window](#the-window) ·
 [The timeline](#the-timeline) ·
 [How sync works](#how-sync-works) ·
 [Using .lrc files](#using-lrc-files) ·
@@ -28,12 +29,12 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 
 1. **Lyrics:** drop a `.ttml` or `.lrc` file onto the window.
 2. **Beatmap:** drop the arrangement XML of your chart (lead, rhythm or bass - it holds the synced beatmap).
-3. **Audio:** drop the audio file your chart uses, or pick it with **🎵 Audio…**. It's used for playback and the timeline.
-4. **Check:** look through the **Lyrics** tab (edit lines if needed), the **timeline** and the **Notes** tab.
+3. **Audio:** drop the audio file your chart uses, or pick it with **🎵 Audio…** in the toolbar. It's used for playback and the timeline.
+4. **Check:** play through the **timeline**, then look through the **Lyrics** tab underneath it (edit lines if needed) and the **Notes** tab.
 5. **Export:** click **Export Rocksmith vocals XML…** and open it in EOF or Charter.
 6. **Review:** play it against the song and fix any wrong syllables, line breaks or timing there. Only then build your CDLC (e.g. in DLC Builder) - don't drop the export straight into a finished CDLC.
 
-Moving on to another song? **New chart…** (top right) clears the lyrics, beatmap, audio and your edits in one go.
+Moving on to another song? **New chart…** (top right of the toolbar) clears the lyrics, beatmap, audio and your edits in one go.
 
 - It always asks first, and **Cancel** is the default.
 - The clear button only unlocks after a moment, so a reflex click or Enter can't wipe your work.
@@ -83,34 +84,72 @@ Lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb
 
 ---
 
+## The window
+
+The window is laid out like a DAW edit window. From top to bottom:
+
+- **Toolbar**, in groups:
+  - **Session:** the loaded lyrics, beatmap and audio files. **…** opens a file, **✕** removes it, and hovering a name shows its details (line count, arrangement, bars, first beat…).
+  - **Transport:** back to the first lyric, previous / next lyric line (**◀◀ ▶▶**), **Play**, **Metronome**, **Follow** and **Loop**.
+  - **MAIN** counter (chart time, as in the exported XML) and **SUB** counter (bar | beat | tick at the playhead).
+  - **Start / End / Length** of the play range, see [Play range and loop](#play-range-and-loop).
+  - **Tempo / Meter** of your chart's beatmap at the playhead.
+  - **Playback:** chart audio or original song, preview nudge, speed and volume.
+  - **⚙ Options** and **New chart…**
+- **Overview strip:** go to a section, the whole song at a glance, zoom and the keyboard help (⌨).
+- **Settings** on the left and the **timeline** with the in-game lyrics preview in the middle.
+- **Lyrics / Output preview / Notes** tabs underneath.
+- **Export** buttons and the offset breakdown at the bottom.
+
+The counters and file displays use the theme's clock colours (green on black unless the theme has its own). Drag the dividers to give the timeline or the lyrics more room.
+
+---
+
 ## The timeline
 
-Below the lyrics you get a timeline with playback and an **in-game lyrics preview**. Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung and the next line waits below. It is built from the exact vocals that will be exported, so you can check the final sync and line breaks before exporting.
+The timeline comes with playback and an **in-game lyrics preview**. Press **Play** (Space / Ctrl+P) and the preview shows each line the way Rocksmith will: syllables light up as they're sung and the next line waits below. It is built from the exact vocals that will be exported, so you can check the final sync and line breaks before exporting.
 
-The timeline rows, top to bottom:
+The timeline rows, top to bottom (the Digital Studio themes draw them as DAW rulers and tracks, with the names in brackets):
 
 | Row | Shows |
 |---|---|
-| Bar · time | measure numbers and time |
-| Sections | coloured, named sections from your chart (Verse 1, Chorus 2…) |
-| Audio | the song's waveform |
+| Bar · time (Bars\|Beats, Min:Secs) | measure numbers and time |
+| Sections (Markers) | coloured, named sections from your chart (Verse 1, Chorus 2…) |
+| Audio | the song's waveform (a clip named after the audio file) |
 | Chart notes | your chart's notes, one lane per string |
-| Lyric lines | each Rocksmith line as one block with its full text |
+| Lyric lines (Vocals) | each Rocksmith line as one block with its full text |
 | Syllables | one bar per syllable, joined within a word, with a mark at every line break |
 | Reference rows | optional: an existing vocals XML to compare against (**File → Compare with existing vocals XML…**), e.g. when redoing a chart that already has vocals |
 
 ### Getting around
 - **Overview strip:** the whole song at a glance. Click or drag it to view any part.
 - **Go to section…** jumps straight to a section; **Fit** shows the whole song.
+- **◀◀ ▶▶** in the toolbar jump to the previous / next lyric line.
 - **Mouse:**
   - click to move the playhead (drag to scrub)
   - click a section to jump to it
   - double-click a lyric line to play it
+  - Shift + drag to select a play range, Shift + click to clear it
   - wheel to scroll (Shift = faster), Ctrl + wheel to zoom
   - right/middle-drag to pan
 
+### Play range and loop
+The **Start / End / Length** clocks show the lyric line under the playhead, or a range you select with **Shift + drag** in the timeline. A selected range is highlighted across the tracks, and the three clocks get a coloured frame while they show it.
+
+- Click **Start** or **End** to jump there.
+- Click **Length** to play the range once; playback stops at its end.
+- **⟲ Loop** (or **L** in the timeline) repeats the range while playing. Without a selected range it repeats the line under the playhead, which is handy for checking one line's timing over and over.
+- Jumping past the end of the loop with the keyboard or mouse isn't pulled back, so you can still move around freely.
+
 ### Keyboard
-Click the timeline first. A coloured frame and a **Keys active** label show it is listening, and **Esc** hands the keyboard back, so these keys never change settings elsewhere. The ⌨ button lists them too.
+The timeline keys work while the timeline has the keyboard. A coloured frame and a **Keys active** label show it is listening. To give it the keyboard, click:
+
+- the timeline itself;
+- the lyrics preview or the overview strip;
+- the transport and zoom buttons;
+- the MAIN or SUB counter, or the Start / End / Length clocks.
+
+Everything except the timeline itself can be switched off in Options. This works the same while playing or paused. **Esc** hands the keyboard back, and **Tab** never moves it into the settings, so these keys can't change anything outside the timeline. The ⌨ button lists them too.
 
 | Key | Action |
 |---|---|
@@ -122,16 +161,18 @@ Click the timeline first. A coloured frame and a **Keys active** label show it i
 | ↑ ↓ | zoom in / out |
 | Space · Enter | play / pause · play the current line |
 | F | fit the whole song |
+| L | loop on / off |
 
 ### Audio
 - **Pick the audio** your chart uses with **🎵 Audio…** or drop it on the window.
 - **A new chart gets fresh audio:** loading a *different* chart XML unloads the previous chart's audio, so you never preview against the wrong song.
 - **Chart audio or the original song:** both work. Lyridan detects which one you loaded and shifts the original song by the intro silence and empty bars.
-- **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead.
+- **Controls:** metronome on the chart's beats, 0.5× / 0.75× speed, follow-playhead and loop.
 
 ### No accidental changes
 - The mouse wheel over a number box, drop-down or slider in the settings **scrolls the panel** instead of changing the value, unless you clicked into that field first.
-- Timeline toolbar controls never keep the keyboard, so arrow keys can't change them by accident.
+- Toolbar buttons never keep the keyboard, and the toolbar drop-downs and nudge box hand it back to the timeline once you've used them, so arrow keys can't change them by accident.
+- Tab can't move the keyboard from the timeline into the settings, and typing while the timeline has the keyboard changes nothing.
 
 ---
 
@@ -230,10 +271,10 @@ Contractions, possessives, elongated words (*ooooh*) and hyphenated words are ha
 
 ## Options and themes
 
-Open them with the **⚙ Options** button at the top right (or Edit → Options):
+Open them with the **⚙ Options** button at the right end of the toolbar (or Edit → Options):
 
 - **Themes and text sizes**
-- **Playback defaults** and the **timeline arrow-key step**
+- **Playback defaults**, the **timeline arrow-key step** and whether clicking the preview, overview, transport buttons or clocks gives the timeline the keyboard
 - **Reopening the last session** and the **default export folder**
 - **Notices:** the export disclaimer and resetting dismissed notices
 - **Alignment model management** and **About this build**
@@ -247,15 +288,15 @@ Open them with the **⚙ Options** button at the top right (or Edit → Options)
 | Running Red | light, white and red |
 | Akai Dark | dark with red accents |
 | Mechanical Red & Orange | dark, black with orange and red |
-| Digital Studio | dark, inspired by a DAW edit window |
-| Digital Studio Light | light, inspired by a classic DAW edit window |
+| Digital Studio | **default**; dark, inspired by a DAW edit window: rulers, markers, clips and track headers in the timeline, green counters |
+| Digital Studio Light | light version of Digital Studio, inspired by a classic DAW edit window |
 | Studio Console | dark, inspired by an analogue mixing console strip |
 | Studio Console Light | light, inspired by a different analogue console strip |
 
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>
 
-*The screenshots use made-up demo lyrics by Claude only to avoid putting too much of real songs in the repo. Elevatorisbest is against generative AI usage and this does not constitute support or endorsement of such stuff.*
+*The screenshots show the timeline holding the keyboard at 0:40 in a demo song. They use made-up demo lyrics by Claude only to avoid putting too much of real songs in the repo. Elevatorisbest is against generative AI usage and this does not constitute support or endorsement of such stuff.*
 
 **Light**
 
