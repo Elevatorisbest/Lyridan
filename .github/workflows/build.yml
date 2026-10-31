@@ -4,12 +4,13 @@ name: Build Lyridan
 # v* tags      -> stable builds + release for that tag
 # dev branch   -> development builds (granular build info inside the app) + rolling "dev-latest" pre-release
 # other branch -> development builds + rolling "<branch>-latest" pre-release
-#                 (v1.1.1 is the old 1.x app and is never built here)
+#                 (v1.1.1 is the old 1.x app; workflowtest / digitalstudiothemetest are test branches -
+#                 none of them are built here)
 # Every release gets an update.json manifest that Lyridan's auto-updater reads
 # (see lyridan/update_channels.py and tools/make_update_manifest.py).
 on:
   push:
-    branches: [ "**", "!v1.1.1" ]
+    branches: [ "**", "!v1.1.1", "!workflowtest", "!digitalstudiothemetest" ]
     tags: [ "v*" ]
   pull_request:
   workflow_dispatch:

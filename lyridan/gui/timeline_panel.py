@@ -36,6 +36,13 @@ class TimelinePanel(QWidget):
 
     click_focus = True                  # preview / overview / transport / clock clicks give the timeline the keys
 
+    BASE_HEIGHT = 396                   # panel height (preview + timeline) in the default 1380 x 860 window
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        # the in-game preview keeps its share of the panel (box and text grow together)
+        self.preview.set_scale(self.height() / self.BASE_HEIGHT)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.player = AudioPlayer()

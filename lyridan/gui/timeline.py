@@ -133,10 +133,33 @@ class TimelineCanvas(QWidget):
 
     ROW_RULER = 26
     ROW_SECTIONS = 20
-    ROW_WAVE = 46
-    ROW_NOTES = 33
-    ROW_LINES = 22
-    ROW_SYLLS = 32
+    # track lanes grow with the timeline's height (lane_scale, set by TimelineView) so a bigger
+    # window keeps the default window's proportions; the rulers keep their size
+    BASE_WAVE, BASE_NOTES, BASE_LINES, BASE_SYLLS = 46, 33, 22, 32
+    lane_scale = 1.0
+
+    @property
+    def ROW_WAVE(self) -> int:
+        return int(self.BASE_WAVE * self.lane_scale)
+
+    @property
+    def ROW_NOTES(self) -> int:
+        return int(self.BASE_NOTES * self.lane_scale)
+
+    @property
+    def ROW_LINES(self) -> int:
+        return int(self.BASE_LINES * self.lane_scale)
+
+    @property
+    def ROW_SYLLS(self) -> int:
+        return int(self.BASE_SYLLS * self.lane_scale)
+
+    def set_lane_scale(self, scale: float):
+        scale = max(1.0, scale)
+        if abs(scale - self.lane_scale) > 0.005:
+            self.lane_scale = scale
+            self._resize()
+            self.update()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -445,6 +468,7 @@ class TimelineCanvas(QWidget):
 
         # chart notes (one lane per string)
         y_notes, nh = rows["notes"]
+        ls = self.lane_scale
         if d and bm and bm.notes:
             a = self.x(bm.notes[0][0])
             b = self.x(max(t + sus for t, sus, _ in bm.notes))
@@ -456,8 +480,8 @@ class TimelineCanvas(QWidget):
                 if t + sus < t0 or t > t1:
                     continue
                 c = QColor(STRING_COLORS[string % 6] if string >= 0 else STRING_COLORS[6])
-                yy = y_notes + 3 + (max(0, string) % 6) * 5
-                p.fillRect(QRectF(self.x(t), yy, max(2.0, sus * self.pps), 3), c)
+                yy = y_notes + 3 * ls + (max(0, string) % 6) * 5 * ls
+                p.fillRect(QRectF(self.x(t), yy, max(2.0, sus * self.pps), 3 * ls), c)
 
         p.setRenderHint(QPainter.Antialiasing, True)
         self._draw_vocals(p, self.vocals, self.lines, rows["lines"], rows["sylls"], self.accent, t0, t1, small, True)
@@ -529,7 +553,7 @@ class TimelineCanvas(QWidget):
         p.setFont(font)
         # --- syllables: a bar per syllable, text underneath (only when it fits, never overlapping)
         sy, sh = syl_row
-        bar_y, bar_h = sy + 4, 9
+        bar_y, bar_h = sy + 4 * self.lane_scale, 9 * self.lane_scale
         i0 = max(0, bisect.bisect_left([e.time for e in entries], t0 - 30) - 1)
         for i in range(i0, len(entries)):
             e = entries[i]
@@ -997,9 +1021,15 @@ class _Overlay(QWidget):
 
 
 class TimelineView(QScrollArea):
+    # viewport size in the default 1380 x 860 window: a bigger view scales the lanes (height) and the
+    # zoom (width) so the same stretch of song fills it, i.e. it looks like the default window scaled up
+    BASE_VIEW_W, BASE_VIEW_H = 1029, 280
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._scaling = False
         self.canvas = TimelineCanvas()
+        self._base_pps = self.canvas.pps        # zoom the user chose, expressed for the default width
         self.setWidget(self.canvas)
         self.setWidgetResizable(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -1009,6 +1039,14 @@ class TimelineView(QScrollArea):
         self.verticalScrollBar().valueChanged.connect(self.overlay.update)
         self.horizontalScrollBar().valueChanged.connect(self._repaint_sticky)
         self.canvas.zoomChanged.connect(lambda *_: self.overlay.update())
+        self.canvas.zoomChanged.connect(self._remember_zoom)
+
+    def _width_scale(self) -> float:
+        return max(1.0, (self.viewport().width() - GUTTER) / (self.BASE_VIEW_W - GUTTER))
+
+    def _remember_zoom(self, pps: float):
+        if not self._scaling:
+            self._base_pps = pps / self._width_scale()
 
     def _repaint_sticky(self, *_):
         """Section and line names stick to the left edge, so their rows are redrawn on scroll."""
@@ -1052,8 +1090,19 @@ class TimelineView(QScrollArea):
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        self.canvas.view_h = self.viewport().height()
-        self.canvas._resize()
+        c = self.canvas
+        c.view_h = self.viewport().height()
+        c.set_lane_scale(c.view_h / self.BASE_VIEW_H)
+        pps = self._base_pps * self._width_scale()
+        if abs(pps - c.pps) > 0.01:
+            left = c.t_at(self.horizontalScrollBar().value() + GUTTER)   # keep the left edge's time in place
+            self._scaling = True
+            try:
+                c.set_zoom(pps)
+            finally:
+                self._scaling = False
+            self.horizontalScrollBar().setValue(int(c.x(left) - GUTTER))
+        c._resize()
         self.overlay.setGeometry(self.viewport().rect())
         self.overlay.raise_()
 

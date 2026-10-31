@@ -146,6 +146,7 @@ def _caption(text: str) -> QLabel:
     lab = QLabel(text)
     lab.setObjectName("ClusterCaption")
     lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    lab.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)   # captions never take the extra width
     return lab
 
 
@@ -391,7 +392,8 @@ class MainWindow(QMainWindow):
         g.addWidget(tl.speed, 1, 3)
         g.addWidget(_caption("🔊"), 2, 0)
         g.addWidget(tl.volume, 2, 1, 1, 3)
-        tl.volume.setFixedWidth(100)
+        tl.volume.setMinimumWidth(100)
+        tl.volume.setMaximumWidth(16777215)          # grows with its cluster
         tb.addWidget(play)
 
         side, g = _cluster()
@@ -400,6 +402,13 @@ class MainWindow(QMainWindow):
         g.setRowStretch(2, 1)
         tb.addWidget(side)
         root.addWidget(bar)
+        # Every cluster keeps its share of the width when the window grows (maximized on a big screen
+        # looks like the default 1380 px window, scaled): see _update_toolbar_stretch.
+        self._toolbar = bar
+        self._clusters = [session, transport, counters, line, tempo, play, side]
+        for b in (tl.btn_start, tl.btn_rew, tl.btn_play, tl.btn_ff, tl.btn_metro, tl.btn_follow, tl.btn_loop,
+                  opt_btn, new_btn):
+            b.setSizePolicy(QSizePolicy.Expanding, b.sizePolicy().verticalPolicy())
         tl.transport_bar.hide()                # its controls now live in the toolbar
 
         # ---- universe strip (section jump, whole-song overview, zoom, keys), full width
@@ -414,8 +423,8 @@ class MainWindow(QMainWindow):
         top = QSplitter(Qt.Horizontal)
         top.addWidget(settings_scroll)
         top.addWidget(tl)
-        top.setStretchFactor(0, 0)
-        top.setStretchFactor(1, 1)
+        top.setStretchFactor(0, 1)             # 340 : 1030 - both keep their share when the window grows
+        top.setStretchFactor(1, 3)
         top.setSizes([340, 1030])
         top.setChildrenCollapsible(False)
         split = QSplitter(Qt.Vertical)
@@ -1396,10 +1405,24 @@ class MainWindow(QMainWindow):
         self._read_settings_from_ui()
         OptionsDialog(self.settings, self).exec()
 
+    SESSION_BASE_WIDTH = 300                   # session cluster width in the default 1380 px window
+
+    def _update_toolbar_stretch(self):
+        """Stretch factor = each cluster's natural width, so extra width is shared out in proportion
+        (instead of all of it going to the session file names)."""
+        lay = self._toolbar.layout()
+        for c in self._clusters:
+            c.ensurePolished()
+            w = c.sizeHint().width()
+            if c is self._clusters[0]:
+                w = max(w, self.SESSION_BASE_WIDTH)
+            lay.setStretchFactor(c, max(1, w))
+
     def apply_options(self, reset_ack: bool = False):
         from .themes import apply_theme, current_colors
         app = QApplication.instance()
         apply_theme(app, self.settings.theme, self.settings.ui_font_pt)
+        self._update_toolbar_stretch()
         colors = current_colors(self.settings.theme)
         vocals = colors.get("vocals") or (colors["accent"] if self.settings.theme != "light" else "#2e8b57")
         self.timeline.set_accent(vocals, colors)

@@ -42,15 +42,15 @@ def test_tags_and_urls():
     assert ch.release_tag("main") is None
     assert ch.manifest_url("main").endswith("/releases/latest/download/update.json")
     assert ch.release_tag("dev") == "dev-latest"
-    assert ch.release_tag("digitalstudiothemetest") == "digitalstudiothemetest-latest"
+    assert ch.release_tag("some-feature") == "some-feature-latest"
     assert ch.release_tag("feature/x").startswith("feature-x-")
     assert ch.release_tag("feature/x") != ch.release_tag("feature-x")
     assert ch.release_tag("Dev") != "dev-latest" and ch.release_tag("MAIN") != "MAIN-latest"
 
 
 @pytest.mark.parametrize("name,excluded", [("v1.1.1", True), ("1.1", True), ("v1.0.0", True), ("", True),
-                                           ("main", False), ("dev", False), ("v2.0", False),
-                                           ("digitalstudiothemetest", False)])
+                                           ("workflowtest", True), ("digitalstudiothemetest", True),
+                                           ("main", False), ("dev", False), ("v2.0", False), ("feature", False)])
 def test_excluded(name, excluded):
     assert ch.is_excluded_branch(name) is excluded
 

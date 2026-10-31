@@ -28,7 +28,8 @@ DEV_BRANCH = "dev"
 BRANCH_MARKER = "lyridan-branch:"          # <!-- lyridan-branch: NAME --> in a release body
 
 # v1.1.1 is the old (pre-2.0) app: it has no updater and can't be updated from.
-EXCLUDED_BRANCHES = ("v1.1.1",)
+# workflowtest / digitalstudiothemetest are experiment branches: never built or offered.
+EXCLUDED_BRANCHES = ("v1.1.1", "workflowtest", "digitalstudiothemetest")
 _LEGACY = re.compile(r"^v?1\.\d+(\.\d+)*$")
 
 # Inno Setup AppId (packaging/windows/lyridan.iss) and the mutex the running app holds.

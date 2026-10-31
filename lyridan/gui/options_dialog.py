@@ -155,7 +155,8 @@ class OptionsDialog(QDialog):
                 self._branch_items[b] = b
         self._fill_branches()
         self.upd_refresh = QPushButton("Refresh list")
-        self.upd_refresh.setToolTip("Load every branch from GitHub (the old v1.1.1 branch is not offered)")
+        self.upd_refresh.setToolTip("Load every branch from GitHub (the old v1.1.1 branch and the test branches "
+                                    "are not offered)")
         self.upd_refresh.clicked.connect(self._load_branches)
         row.addWidget(self.upd_branch, 1)
         row.addWidget(self.upd_refresh)

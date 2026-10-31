@@ -38,14 +38,29 @@ class LyricPreview(QWidget):
         self.starts: List[float] = []
         self.t: Optional[float] = None
         self.font_pt = 22
-        self.setMinimumHeight(96)
+        self.scale = 1.0                       # > 1 when the window is bigger than the default (set by the panel)
+        self.setFixedHeight(96)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.native = False
 
+    def _pt(self, pt: float) -> int:
+        return max(1, int(round(pt * self.scale)))
+
+    def _apply_height(self):
+        self.setFixedHeight(int(self.font_pt * 4.4 * self.scale))
+
     def set_font_size(self, pt: int):
         self.font_pt = max(10, int(pt))
-        self.setMinimumHeight(int(self.font_pt * 4.4))
+        self._apply_height()
         self.update()
+
+    def set_scale(self, scale: float):
+        """Grow the box and its text together, so it keeps its proportions in a bigger window."""
+        scale = max(1.0, scale)
+        if abs(scale - self.scale) > 0.01:
+            self.scale = scale
+            self._apply_height()
+            self.update()
 
     def set_entries(self, entries: List[VocalEntry]):
         self.lines, cur = [], []
@@ -95,16 +110,16 @@ class LyricPreview(QWidget):
         if li < 0:
             p.setPen(NEXT)
             f = QFont(self.font())
-            f.setPointSize(max(10, self.font_pt // 2))
+            f.setPointSize(self._pt(max(10, self.font_pt // 2)))
             p.setFont(f)
             p.drawText(r, Qt.AlignCenter, "In-game lyrics preview - load lyrics, then press Play or click the timeline")
             p.end()
             return
         big = QFont(self.font())
-        big.setPointSize(self.font_pt)
+        big.setPointSize(self._pt(self.font_pt))
         big.setBold(True)
         small = QFont(big)
-        small.setPointSize(max(9, int(self.font_pt * 0.72)))
+        small.setPointSize(self._pt(max(9, int(self.font_pt * 0.72))))
         small.setBold(False)
         line = self.lines[li]
         y1 = r.height() * 0.44
@@ -138,7 +153,7 @@ class LyricPreview(QWidget):
                 p.fillRect(QRectF(x - 2, baseline - fm.ascent() - 2, fm.horizontalAdvance(s.text) + 4,
                                   fm.height() + 4), glow)
                 prog = 1.0 if s.length <= 0 else min(1.0, max(0.0, (t - s.time) / s.length))
-                p.setPen(QPen(SUNG, 3))
+                p.setPen(QPen(SUNG, max(3, round(3 * self.scale))))
                 p.drawLine(int(x), int(baseline + fm.descent() + 3),
                            int(x + fm.horizontalAdvance(s.text) * prog), int(baseline + fm.descent() + 3))
                 p.setPen(NOW)
