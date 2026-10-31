@@ -147,7 +147,7 @@ begin
     if IsAdminInstallMode then
       Msg := 'Lyridan is also installed just for your account in:' + #13#10 + Dir + #13#10#13#10 +
              'Installing for all users leaves that copy in place (you can remove it in Settings > Apps).' +
-             #13#10#13#10 + 'Continue?'
+             (#13#10#13#10 + 'Continue?')
     else
       Msg := 'Lyridan is already installed for all users in:' + #13#10 + Dir + #13#10#13#10 +
              'Installing only for you creates a second copy. To update the existing copy instead, click No ' +
