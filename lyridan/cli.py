@@ -41,6 +41,8 @@ def _settings_from_args(a):
         s.ja.syllables = a.ja_syllables
     if a.no_source_romaji:
         s.use_source_romaji = False
+    if a.keep_backticks:
+        s.backtick_to_apostrophe = False
     return s
 
 
@@ -93,6 +95,8 @@ def main(argv=None):
         sp.add_argument("--max-chars", type=int)
         sp.add_argument("--max-syllables", type=int, help="max sung syllables per Rocksmith line (default 8, 0 = off)")
         sp.add_argument("--background", choices=["exclude", "nonoverlap"])
+        sp.add_argument("--keep-backticks", action="store_true",
+                        help="don't turn ` into ' (backticks can crash Editor on Fire's vocals import)")
 
     c = sub.add_parser("convert", help="create a Rocksmith vocals XML")
     common(c)

@@ -660,8 +660,11 @@ class MainWindow(QMainWindow):
         f.addRow("New line after pauses ≥", S.sp_gapsplit)
         S.ck_caps = QCheckBox("Capitalize the first word of each line")
         S.ck_ascii = QCheckBox("Rocksmith-safe characters only (ASCII)")
+        S.ck_backtick = QCheckBox("Replace backticks (`) with apostrophes (')")
+        S.ck_backtick.setToolTip("Editor on Fire can crash when it imports a vocals XML that contains a backtick.")
         f.addRow(S.ck_caps)
         f.addRow(S.ck_ascii)
+        f.addRow(S.ck_backtick)
         S.le_punct = QLineEdit()
         S.le_punct.setMaxLength(12)
         f.addRow("Keep punctuation", S.le_punct)
@@ -683,7 +686,8 @@ class MainWindow(QMainWindow):
                    S.cb_ru_syl, S.cb_snap, S.cb_gap, S.cb_weight, S.cb_bg):
             cb.currentIndexChanged.connect(self._settings_changed)
         for ck in (S.ck_ja_apos, S.ck_ja_lyric, S.ck_ja_apple, S.ck_ja_foreign, S.ck_ru_yo, S.ck_ru_soft,
-                   S.ck_hyphen, S.ck_silence, S.ck_bars, S.ck_lyricoff, S.ck_leading, S.ck_caps, S.ck_ascii):
+                   S.ck_hyphen, S.ck_silence, S.ck_bars, S.ck_lyricoff, S.ck_leading, S.ck_caps, S.ck_ascii,
+                   S.ck_backtick):
             ck.toggled.connect(self._settings_changed)
         for sp in (S.sp_silence, S.sp_bars, S.sp_manual, S.sp_maxsyl, S.sp_maxchars, S.sp_gapsplit, S.sp_note):
             sp.valueChanged.connect(self._settings_changed)
@@ -757,6 +761,7 @@ class MainWindow(QMainWindow):
             S.sp_gapsplit.setValue(s.gap_split_seconds)
             S.ck_caps.setChecked(s.capitalize_lines)
             S.ck_ascii.setChecked(s.ascii_only)
+            S.ck_backtick.setChecked(s.backtick_to_apostrophe)
             S.le_punct.setText(s.keep_punctuation)
             S.sp_note.setValue(s.note_value)
         finally:
@@ -797,6 +802,7 @@ class MainWindow(QMainWindow):
         s.gap_split_seconds = S.sp_gapsplit.value()
         s.capitalize_lines = S.ck_caps.isChecked()
         s.ascii_only = S.ck_ascii.isChecked()
+        s.backtick_to_apostrophe = S.ck_backtick.isChecked()
         s.keep_punctuation = S.le_punct.text()
         s.note_value = S.sp_note.value()
 
