@@ -116,6 +116,15 @@ class OptionsDialog(QDialog):
         row.addWidget(self.export_dir, 1)
         row.addWidget(b)
         f.addRow("Default export folder", row)
+        self.backtick = QCheckBox("Replace backticks (`) in lyrics with apostrophes (')")
+        self.backtick.setChecked(self.s.backtick_to_apostrophe)
+        f.addRow(self.backtick)
+        bt_note = QLabel("Automatic fix, on by default: Editor on Fire can crash when it imports a vocals XML that "
+                         "contains a backtick, so Lyridan writes an apostrophe instead (I`m → I'm). Turn this off "
+                         "only if you need the backticks kept.")
+        bt_note.setWordWrap(True)
+        bt_note.setStyleSheet("color: gray;")
+        f.addRow(bt_note)
         self.disclaimer = QCheckBox("Show the export disclaimer")
         self.disclaimer.setChecked(not self.s.disclaimer_acknowledged)
         f.addRow(self.disclaimer)
@@ -296,6 +305,8 @@ class OptionsDialog(QDialog):
         s.restore_session = self.restore.isChecked()
         s.export_folder = self.export_dir.text().strip()
         s.disclaimer_acknowledged = not self.disclaimer.isChecked()
+        backticks_changed = s.backtick_to_apostrophe != self.backtick.isChecked()
+        s.backtick_to_apostrophe = self.backtick.isChecked()
         old_branch = s.update_branch
         s.update_check = self.upd_check.isChecked()
         s.update_auto_install = self.upd_auto.isChecked()
@@ -307,6 +318,8 @@ class OptionsDialog(QDialog):
                 self.parent().updates.on_branch_changed()
         if self.parent() is not None and hasattr(self.parent(), "apply_options"):
             self.parent().apply_options(reset_ack=self.reset_ack)
+        if backticks_changed and self.parent() is not None and hasattr(self.parent(), "recalculate"):
+            self.parent().recalculate()               # the vocals preview / export text changes
 
     def _ok(self):
         self._apply()

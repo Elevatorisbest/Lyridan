@@ -34,6 +34,13 @@ def _git(*args: str) -> str:
         return ""
 
 
+def dev_build_label(i: Dict) -> str:
+    """"dev.7" for builds that know their per-version number, "#123" (CI run) for older ones."""
+    if i.get("dev_build"):
+        return f"dev.{i['dev_build']}"
+    return f"#{i.get('build_number', '?')}"
+
+
 @lru_cache(maxsize=1)
 def info() -> Dict:
     if _RAW:
@@ -106,8 +113,9 @@ def details() -> List[Tuple[str, str]]:
         ("Commit message", i.get("commit_subject", "")),
         ("Commit author / date", " · ".join(x for x in (i.get("commit_author"), i.get("commit_date")) if x)),
         ("Commits on branch", i.get("commit_count", "")),
-        ("Build number", "#" + str(i.get("build_number")) + (f" (attempt {i['run_attempt']})"
-                                                               if i.get("run_attempt") not in ("", "1", None) else "")),
+        ("Build number", dev_build_label(i)
+         + (f" (CI run #{i['build_number']})" if i.get("dev_build") and i.get("build_number") != "local" else "")
+         + (f" (attempt {i['run_attempt']})" if i.get("run_attempt") not in ("", "1", None) else "")),
         ("Built", " · ".join(x for x in (i.get("build_date"), i.get("builder")) if x)),
         ("Build machine", " ".join(x for x in (i.get("builder_os"), i.get("builder_arch"),
                                                 i.get("builder_image")) if x)),

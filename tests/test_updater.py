@@ -235,3 +235,25 @@ def test_settings_roundtrip():
     assert not Settings.from_json({"update_auto_install": True}).update_auto_install   # dev.29-31 default reset
     s = Settings.from_json({"update_auto_install": True, "update_prefs_rev": 1})     # chosen in Options: kept
     assert s.update_auto_install and Settings.from_json(s.to_json()).update_auto_install
+
+
+def test_dev_build_number_restarts_for_each_version(monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("wbi", os.path.join(ROOT, "tools", "write_build_info.py"))
+    wbi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(wbi)
+    calls = []
+
+    def fake_git(*args):
+        calls.append(args)
+        if args[0] == "log":
+            return "abc123" if 'VERSION = "2.0.1"' in args else ""
+        if args[:2] == ("rev-list", "--count"):
+            return {"abc123..HEAD": "0"}.get(args[2], "")
+        return ""
+    monkeypatch.setattr(wbi, "git", fake_git)
+    assert wbi.version_build("2.0.1") == "1"          # the version-bump commit itself
+    monkeypatch.setattr(wbi, "git", lambda *a: "abc123" if a[0] == "log" else "4")
+    assert wbi.version_build("2.0.1") == "5"
+    monkeypatch.setattr(wbi, "git", lambda *a: "")
+    assert wbi.version_build("2.0.1") == ""           # shallow clone: caller falls back to the run number

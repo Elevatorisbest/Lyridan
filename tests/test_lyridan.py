@@ -151,10 +151,12 @@ def test_build_info_channels(tmp_path, monkeypatch):
     env["GITHUB_REF_NAME"] = "dev"
     out = subprocess.check_output([sys.executable, os.path.join(ROOT, "tools", "write_build_info.py")],
                                   env=env, text=True).strip()
-    assert out.endswith("-dev.7")
     import lyridan._build
     importlib.reload(lyridan._build)
     importlib.reload(buildinfo)
+    i = buildinfo.info()
+    # the label counts builds within this VERSION; the CI run number stays the updater's ordering key
+    assert out == f"{buildinfo.VERSION}-dev.{i['dev_build']}" and i["build_number"] == "7"
     assert buildinfo.is_dev() and any(k == "Branch" for k, _ in buildinfo.details())
     # restore the empty source-tree default
     with open(os.path.join(ROOT, "lyridan", "_build.py"), "w", encoding="utf-8") as fh:

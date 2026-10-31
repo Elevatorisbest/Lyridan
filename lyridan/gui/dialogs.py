@@ -68,7 +68,7 @@ def about_text() -> str:
     i = buildinfo.info()
     build = ""
     if buildinfo.is_dev():
-        build = (f"<p style='color:gray'>Development build #{i.get('build_number', '?')} · "
+        build = (f"<p style='color:gray'>Development build {buildinfo.dev_build_label(i)} · "
                  f"{i.get('branch', '')} @ {i.get('commit_short', '')}"
                  + (f" · {i['build_date']}" if i.get("build_date") else "")
                  + "<br>Full details: Settings panel → Build information.</p>")

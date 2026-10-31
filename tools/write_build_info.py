@@ -10,6 +10,11 @@ Outputs
   * lyridan/_build.py                    BUILD_INFO dict read by lyridan/buildinfo.py
   * packaging/windows/version_info.txt   Windows file-version resource
 Prints the version label used in file names, e.g. "2.0.0" or "2.0.0-dev.37".
+
+Dev build numbers ("-dev.N") start again at 1 for every new VERSION: N counts the commits since the
+commit that set the current VERSION in lyridan/__init__.py (that commit itself is dev.1). The
+internal "build_number" (the CI run number) keeps counting up across versions, because the
+auto-updater of already-installed builds uses it to tell which build is newer.
 """
 import argparse
 import datetime
@@ -30,6 +35,15 @@ def git(*args: str) -> str:
                                        text=True).strip()
     except Exception:  # noqa: BLE001
         return ""
+
+
+def version_build(version: str) -> str:
+    """Dev build number within ``version``: 1 for the commit that set it, +1 for every commit after."""
+    bump = git("log", "-1", "--format=%H", "-S", f'VERSION = "{version}"', "--", "lyridan/__init__.py")
+    if not bump:
+        return ""                     # shallow clone / not a git checkout
+    since = git("rev-list", "--count", f"{bump}..HEAD")
+    return str(int(since) + 1) if since.isdigit() else ""
 
 
 def main():
@@ -62,14 +76,16 @@ def main():
     repo = env.get("GITHUB_REPOSITORY", "")
     server = env.get("GITHUB_SERVER_URL", "https://github.com")
     build_no = run_number or git("rev-list", "--count", "HEAD") or "0"
+    dev_build = version_build(VERSION) or build_no
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    label = VERSION if channel == "stable" else f"{VERSION}-dev.{build_no}"
+    label = VERSION if channel == "stable" else f"{VERSION}-dev.{dev_build}"
     info = {
         "channel": channel,
         "version": VERSION,
         "label": label,
-        "build_number": build_no,
+        "build_number": build_no,          # CI run number: only ever goes up (the updater compares it)
+        "dev_build": dev_build,            # the N in "-dev.N": starts at 1 for each VERSION
         "run_attempt": env.get("GITHUB_RUN_ATTEMPT", ""),
         "branch": branch,
         "ref_type": ref_type or "branch",
@@ -99,7 +115,7 @@ def main():
         fh.write("BUILD_INFO = " + json.dumps(info, indent=4, ensure_ascii=False)
                  .replace(": true", ": True").replace(": false", ": False") + "\n")
 
-    nums = [int(x) for x in VERSION.split(".")[:3]] + [int(build_no) if channel == "dev" and build_no.isdigit() else 0]
+    nums = [int(x) for x in VERSION.split(".")[:3]] + [int(dev_build) if channel == "dev" and dev_build.isdigit() else 0]
     tup = ", ".join(str(min(n, 65535)) for n in nums)
     desc = "Lyridan - lyrics to Rocksmith vocals" + (" (development build)" if channel == "dev" else "")
     vi = f"""VSVersionInfo(
