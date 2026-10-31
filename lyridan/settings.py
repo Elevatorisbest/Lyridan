@@ -81,6 +81,7 @@ class Settings:
     update_check: bool = True              # look for a newer build when Lyridan starts
     update_auto_install: bool = False      # True: download in the background, install on the next start
     update_branch: str = ""                # "" = the branch this build came from; "main" = stable releases
+    update_prefs_rev: int = 1              # 1 = auto-install defaults to off (dev.29-31 saved it as on)
 
     # ---- other exports ------------------------------------------------------
     text_syllable_sep: str = "-"
@@ -99,6 +100,10 @@ class Settings:
                 s.ja = JapaneseOptions(**{a: b for a, b in v.items() if a in jn})
             elif k in names:
                 setattr(s, k, v)
+        if int((data or {}).get("update_prefs_rev", 0) or 0) < 1:
+            # settings saved by dev.29-31 hold the old default (auto-install on) without anyone choosing it
+            s.update_auto_install = False
+            s.update_prefs_rev = 1
         return s
 
     @classmethod

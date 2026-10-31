@@ -231,3 +231,7 @@ def test_settings_roundtrip():
     from lyridan.settings import Settings
     s = Settings.from_json({"update_branch": "dev", "update_auto_install": False})
     assert s.update_branch == "dev" and not s.update_auto_install and s.update_check
+    assert not Settings().update_auto_install                                     # off by default
+    assert not Settings.from_json({"update_auto_install": True}).update_auto_install   # dev.29-31 default reset
+    s = Settings.from_json({"update_auto_install": True, "update_prefs_rev": 1})     # chosen in Options: kept
+    assert s.update_auto_install and Settings.from_json(s.to_json()).update_auto_install
