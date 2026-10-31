@@ -58,6 +58,7 @@ class Settings:
     capitalize_lines: bool = True
     keep_punctuation: str = "?!"
     ascii_only: bool = True                # Rocksmith default font is ASCII-only
+    backtick_to_apostrophe: bool = True    # ` -> ' (backticks crash Editor on Fire's vocals import)
     note_value: int = 0
 
     # ---- notices ------------------------------------------------------------

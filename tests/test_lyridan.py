@@ -397,3 +397,32 @@ def test_timeline_lines_sections_and_steps():
     ss = sections_of(bm, 10.0)
     assert [s.label for s in ss] == ["Intro", "Verse 1", "Verse 2", "Pre-chorus"]
     assert ss[-1].end == 10.0
+
+
+def test_backticks_become_apostrophes(tmp_path):
+    from lyridan.parsers.rsxml import write_vocals
+    p = tmp_path / "bt.lrc"
+    p.write_text("[00:20.00]<00:20.00>I`m <00:21.00>don`t <00:21.80>rock`n`roll <00:23.00>\n", encoding="utf-8")
+    src = load_lyrics(str(p))
+    bm = parse_beatmap(os.path.join(F, "baby_be_mine_bass.xml"))
+    s = Settings()
+    assert s.backtick_to_apostrophe
+    pr = process(src, s)
+    assert [s_.text for l in pr.lines for w in l.words for s_ in w.syllables][0] == "I'm"   # one syllable, not I-'m
+    res = build_vocals(pr.lines, s, bm, src.lyric_offset, src.leading_silence)
+    out = tmp_path / "v.xml"
+    write_vocals(res.entries, str(out))
+    assert "`" not in out.read_text(encoding="utf-8")
+    assert "".join(e.lyric for e in parse_vocals(str(out))) == "I'mdon'trock'n'-roll+"
+    # GOST-B latinization produces backticks itself; they are swapped on export too
+    s.ru_scheme = "gost_b"
+    p.write_text("[00:20.00]<00:20.00>объём <00:21.00>\n", encoding="utf-8")
+    src = load_lyrics(str(p))
+    res = build_vocals(process(src, s).lines, s, bm, src.lyric_offset, src.leading_silence)
+    assert not any("`" in e.lyric for e in res.entries)
+    # toggled off: backticks are kept
+    s = Settings(backtick_to_apostrophe=False, ascii_only=False)
+    p.write_text("[00:20.00]<00:20.00>don`t <00:21.00>\n", encoding="utf-8")
+    src = load_lyrics(str(p))
+    res = build_vocals(process(src, s).lines, s, bm, src.lyric_offset, src.leading_silence)
+    assert [e.lyric for e in res.entries] == ["Don`t+"]

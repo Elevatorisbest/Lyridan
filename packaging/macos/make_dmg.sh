@@ -2,7 +2,7 @@
 # Package dist/Lyridan.app into a drag-to-Applications DMG.
 # Usage: packaging/macos/make_dmg.sh <version> <arch-label>   (e.g. 2.0.0 AppleSilicon)
 set -euo pipefail
-VERSION="${1:-2.0.0}"
+VERSION="${1:-2.0.1}"
 ARCH="${2:-$(uname -m)}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP="$ROOT/dist/Lyridan.app"
