@@ -91,12 +91,14 @@ class Grid:
 
 
 # ---------------------------------------------------------------------------
-_RS_SAFE_MAP = {"’": "'", "‘": "'", "‚": "'", "´": "'", "`": "'", "“": "\"", "”": "\"", "„": "\"",
+_RS_SAFE_MAP = {"’": "'", "‘": "'", "‚": "'", "´": "'", "“": "\"", "”": "\"", "„": "\"",
                 "…": "...", "–": "-", "—": "-", " ": " "}
 
 
-def rs_clean(text: str, ascii_only: bool) -> str:
+def rs_clean(text: str, ascii_only: bool, backticks_to_apostrophes: bool = True) -> str:
     t = "".join(_RS_SAFE_MAP.get(c, c) for c in text)
+    if backticks_to_apostrophes:
+        t = t.replace("`", "'")      # Editor on Fire crashes on ` in an imported vocals XML
     if ascii_only:
         t = unicodedata.normalize("NFKD", t)
         t = "".join(c for c in t if not unicodedata.combining(c))
@@ -427,7 +429,7 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
         if en - st < min_len:
             room = (starts[i + 1] - grid.gap_at(starts[i + 1]) - st) if i + 1 < len(events) else min_len
             en = st + max(0.0, min(min_len, room))
-        text = rs_clean(ev[2], settings.ascii_only and not native) + ev[3]
+        text = rs_clean(ev[2], settings.ascii_only and not native, settings.backtick_to_apostrophe) + ev[3]
         entries.append(VocalEntry(round(st, 3), round(max(0.0, en - st), 3), text, settings.note_value))
 
     # charting guideline checks

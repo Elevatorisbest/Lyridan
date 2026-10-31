@@ -74,6 +74,7 @@ Apple's own syllable splits are kept: if the TTML splits a word (`para` + `dise`
 - The first word of each line is capitalized.
 - Punctuation is cleaned up.
 - Characters are ASCII-safe for the stock font.
+- Backticks (`` ` ``) become apostrophes (`'`), so Editor on Fire can import the vocals XML without crashing (Options → General, on by default).
 
 ### Phrase-aware line breaks
 Lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:

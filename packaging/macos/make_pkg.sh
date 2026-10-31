@@ -2,7 +2,7 @@
 # Package dist/Lyridan.app into a macOS installer (.pkg) that installs to /Applications.
 # Usage: packaging/macos/make_pkg.sh <version-label> <arch-label>   (e.g. 2.0.0-dev.42 Intel)
 set -euo pipefail
-LABEL="${1:-2.0.0}"
+LABEL="${1:-2.0.1}"
 ARCH="${2:-$(uname -m)}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP="$ROOT/dist/Lyridan.app"

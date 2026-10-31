@@ -25,6 +25,11 @@ class Processed:
     source: Optional[SourceLyrics] = None
 
 
+def swap_backticks(text: str) -> str:
+    """Backticks used as apostrophes (I`m, rock`n`roll) -> plain apostrophes."""
+    return text.replace("`", "'")
+
+
 def detect_language(text: str) -> str:
     ja = sum(1 for c in text if is_japanese_char(c))
     ru = sum(1 for c in text if "Ѐ" <= c <= "ӿ")
@@ -250,6 +255,8 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
         if use_romaji:
             pieces = sl.romaji
         text, owner = build_text(pieces)
+        if settings.backtick_to_apostrophe:
+            text = swap_backticks(text)       # same length, so ``owner`` still lines up
         warns: List[str] = []
         if line_lang == "ja" and not use_romaji:
             words, warns = jp.process_line(text, ja_opts, eng)
@@ -280,6 +287,8 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
         for i, ln in enumerate(lines):
             txt = overrides.get(ln.index)
             if txt is not None and txt.strip():
+                if settings.backtick_to_apostrophe:
+                    txt = swap_backticks(txt)
                 lines[i] = apply_override(ln, txt)
     lines.sort(key=lambda l: l.start)
     if source.timing in ("line", "none"):

@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
         self._load_settings_into_ui()
         if buildinfo.is_dev():
             i = buildinfo.info()
-            tag = QLabel(f" DEV #{i.get('build_number', '?')} · {i.get('branch', '')} @ {i.get('commit_short', '')} ")
+            tag = QLabel(f" DEV {buildinfo.dev_build_label(i)} · {i.get('branch', '')} @ {i.get('commit_short', '')} ")
             tag.setStyleSheet("background:#f5a524; color:black; font-weight:bold; border-radius:3px;")
             tag.setToolTip(buildinfo.as_text())
             self.statusBar().addPermanentWidget(tag)
