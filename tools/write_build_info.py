@@ -1,6 +1,6 @@
 """Write build metadata before packaging (run by CI and by the local build scripts).
 
-  python tools/write_build_info.py [--channel dev|stable] [--print json|version]
+  python tools/write_build_info.py [--channel dev|stable] [--print json|version] [--json-out FILE]
 
 Channel detection (when --channel is not given):
   * GitHub Actions on branch "main" or on a "v*" tag  -> stable
@@ -36,6 +36,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--channel", choices=["dev", "stable"])
     p.add_argument("--print", dest="out", choices=["version", "json"], default="version")
+    p.add_argument("--json-out", dest="json_out", help="also write BUILD_INFO as JSON to this file")
     a = p.parse_args()
     env = os.environ
 
@@ -62,6 +63,7 @@ def main():
     server = env.get("GITHUB_SERVER_URL", "https://github.com")
     build_no = run_number or git("rev-list", "--count", "HEAD") or "0"
 
+    now = datetime.datetime.now(datetime.timezone.utc)
     label = VERSION if channel == "stable" else f"{VERSION}-dev.{build_no}"
     info = {
         "channel": channel,
@@ -78,7 +80,8 @@ def main():
         "commit_subject": git("log", "-1", "--format=%s")[:200],
         "commit_author": git("log", "-1", "--format=%an"),
         "dirty": bool(git("status", "--porcelain", "--untracked-files=no")) and not env.get("GITHUB_ACTIONS"),
-        "build_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "build_date": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "build_time": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "builder": "GitHub Actions" if env.get("GITHUB_ACTIONS") == "true" else f"local ({platform.node()})",
         "builder_os": env.get("RUNNER_OS") or platform.system(),
         "builder_arch": env.get("RUNNER_ARCH") or platform.machine(),
@@ -120,6 +123,9 @@ def main():
     os.makedirs(os.path.join(ROOT, "packaging", "windows"), exist_ok=True)
     with open(os.path.join(ROOT, "packaging", "windows", "version_info.txt"), "w", encoding="utf-8") as fh:
         fh.write(vi)
+    if a.json_out:
+        with open(a.json_out, "w", encoding="utf-8") as fh:
+            json.dump(info, fh, indent=2, ensure_ascii=False)
     print(json.dumps(info, indent=2) if a.out == "json" else label)
 
 

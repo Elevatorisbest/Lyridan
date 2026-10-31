@@ -77,6 +77,11 @@ class Settings:
     export_folder: str = ""                # "" = next to the beatmap / lyrics
     last_session: Dict[str, str] = field(default_factory=dict)
 
+    # ---- updates (Options → Updates; see lyridan/updater.py) ------------------------
+    update_check: bool = True              # look for a newer build when Lyridan starts
+    update_auto_install: bool = True       # download in the background, install on the next start
+    update_branch: str = ""                # "" = the branch this build came from; "main" = stable releases
+
     # ---- other exports ------------------------------------------------------
     text_syllable_sep: str = "-"
     text_word_sep: str = " "

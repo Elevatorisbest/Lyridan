@@ -1,11 +1,15 @@
 name: Build Lyridan
 
-# dev  branch -> development builds (granular build info inside the app) + rolling "dev-latest" pre-release
-# main branch -> stable builds (plain version) + GitHub release "v<VERSION>"
-# v* tags     -> stable builds + release for that tag
+# main branch  -> stable builds (plain version) + GitHub release "v<VERSION>" (marked latest)
+# v* tags      -> stable builds + release for that tag
+# dev branch   -> development builds (granular build info inside the app) + rolling "dev-latest" pre-release
+# other branch -> development builds + rolling "<branch>-latest" pre-release
+#                 (v1.1.1 is the old 1.x app and is never built here)
+# Every release gets an update.json manifest that Lyridan's auto-updater reads
+# (see lyridan/update_channels.py and tools/make_update_manifest.py).
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches: [ "**", "!v1.1.1" ]
     tags: [ "v*" ]
   pull_request:
   workflow_dispatch:
@@ -57,7 +61,7 @@ jobs:
         id: ver
         shell: bash
         run: |
-          V=$(python tools/write_build_info.py)
+          V=$(python tools/write_build_info.py --json-out build_info.json)
           C=$(python -c "import json,sys; sys.path.insert(0,'.'); from lyridan._build import BUILD_INFO as b; print(b['channel'])")
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "channel=$C" >> "$GITHUB_OUTPUT"
@@ -81,6 +85,10 @@ jobs:
       - name: Portable zip
         shell: pwsh
         run: Compress-Archive -Path dist\Lyridan\* -DestinationPath dist\Lyridan-${{ steps.ver.outputs.version }}-Windows-x64-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: build_info.json
       - uses: actions/upload-artifact@v4
         with:
           name: Lyridan-${{ steps.ver.outputs.version }}-Windows-x64
@@ -153,15 +161,29 @@ jobs:
           merge-multiple: true
       - name: Publish
         run: |
+          mkdir -p meta
+          mv artifacts/build_info.json meta/build_info.json
           ls -la artifacts
+          BRANCH=$(python3 -c "import json; print(json.load(open('meta/build_info.json'))['branch'])")
           if [ "$CHANNEL" = "dev" ]; then
-            # rolling pre-release that always holds the newest dev build
-            gh release delete dev-latest --yes --cleanup-tag || true
-            gh release create dev-latest artifacts/* --prerelease --target "$GITHUB_SHA" \
-              --title "Development build $VERSION_LABEL" \
-              --notes "Automatic build of \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7} (run #${GITHUB_RUN_NUMBER}). Not a stable release."
+            TAG=$(python3 tools/make_update_manifest.py --tag-for "$BRANCH")
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
           else
-            if [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; else TAG="v$VERSION_LABEL"; fi
+            TAG="v$VERSION_LABEL"
+          fi
+          echo "release tag: $TAG"
+          # manifest for the auto-updater; uploaded last so it never points at files that aren't there yet
+          python3 tools/make_update_manifest.py --info meta/build_info.json --dir artifacts --tag "$TAG" \
+            --out meta/update.json
+          if [ "$CHANNEL" = "dev" ]; then
+            # rolling pre-release that always holds the newest build of this branch
+            NOTES=$(printf 'Automatic build of `%s` @ %s (run #%s). Not a stable release.\n\n<!-- lyridan-branch: %s -->' \
+              "$BRANCH" "${GITHUB_SHA::7}" "$GITHUB_RUN_NUMBER" "$BRANCH")
+            gh release delete "$TAG" --yes --cleanup-tag || true
+            gh release create "$TAG" artifacts/* --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Development build $VERSION_LABEL ($BRANCH)" --notes "$NOTES"
+          else
             if gh release view "$TAG" >/dev/null 2>&1; then
               gh release upload "$TAG" artifacts/* --clobber
             else
@@ -169,3 +191,4 @@ jobs:
                 --generate-notes --latest
             fi
           fi
+          gh release upload "$TAG" meta/update.json --clobber

@@ -1,0 +1,23 @@
+name: Remove builds of deleted branches
+
+# When a branch is deleted, remove its rolling "<branch>-latest" pre-release so the
+# auto-updater and the Options branch list stop offering it.
+on: delete
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REF: ${{ github.event.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete the branch's rolling release
+        run: |
+          TAG=$(python3 tools/make_update_manifest.py --tag-for "$REF") || exit 0
+          if [ -z "$TAG" ] || [ "$TAG" = "dev-latest" ]; then exit 0; fi
+          gh release delete "$TAG" --yes --cleanup-tag || true

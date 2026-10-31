@@ -26,6 +26,7 @@ class OptionsDialog(QDialog):
         tabs.addTab(self._appearance(), "Appearance")
         tabs.addTab(self._playback(), "Timeline && playback")
         tabs.addTab(self._general(), "General")
+        tabs.addTab(self._updates(), "Updates")
         tabs.addTab(self._model(), "Audio alignment")
         tabs.addTab(self._build(), "About this build")
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
@@ -127,6 +128,98 @@ class OptionsDialog(QDialog):
         f.addRow(folder)
         return w
 
+    def _updates(self):
+        from .. import updater
+        from ..update_channels import DEV_BRANCH, STABLE_BRANCH
+        w, f = self._form()
+        info = buildinfo.info()
+        here = updater.track_of(info) or "unknown"
+        self.upd_check = QCheckBox("Check for updates when Lyridan starts")
+        self.upd_check.setChecked(self.s.update_check)
+        f.addRow(self.upd_check)
+        self.upd_auto = QCheckBox("Download updates in the background and install them the next time Lyridan "
+                                  "starts")
+        self.upd_auto.setToolTip("Off: Lyridan shows a bar with an Update now button and installs nothing on "
+                                 "its own.")
+        self.upd_auto.setChecked(self.s.update_auto_install)
+        self.upd_check.toggled.connect(self.upd_auto.setEnabled)
+        self.upd_auto.setEnabled(self.s.update_check)
+        f.addRow(self.upd_auto)
+        row = QHBoxLayout()
+        self.upd_branch = QComboBox()
+        self.upd_branch.setMinimumContentsLength(28)
+        self._branch_items = {"": f"Automatic - same as this build ({here})",
+                              STABLE_BRANCH: f"{STABLE_BRANCH} - stable releases"}
+        for b in (DEV_BRANCH, self.s.update_branch, here):
+            if b and b not in self._branch_items and not updater.is_excluded_branch(b):
+                self._branch_items[b] = b
+        self._fill_branches()
+        self.upd_refresh = QPushButton("Refresh list")
+        self.upd_refresh.setToolTip("Load every branch from GitHub (the old v1.1.1 branch is not offered)")
+        self.upd_refresh.clicked.connect(self._load_branches)
+        row.addWidget(self.upd_branch, 1)
+        row.addWidget(self.upd_refresh)
+        f.addRow("Update from branch", row)
+        self.upd_status = QLabel("")
+        self.upd_status.setStyleSheet("color: gray;")
+        self.upd_status.setWordWrap(True)
+        f.addRow(self.upd_status)
+        target = updater.install_target()
+        lines = [f"This build: Lyridan {info.get('label', '')} from '{here}'"
+                 + (f" @ {info.get('commit_short')}" if info.get("commit_short") else "") + "."]
+        if not target.kind:
+            lines.append(target.reason)
+        lines.append("Branches other than main are development builds: they are built from every push and can "
+                     "be unstable. Choosing a different branch installs its newest build, even if it is older "
+                     "than this one. Your settings are kept.")
+        note = QLabel("\n\n".join(lines))
+        note.setWordWrap(True)
+        note.setStyleSheet("color: gray;")
+        f.addRow(note)
+        now = QPushButton("Check for updates now")
+        now.clicked.connect(self._check_now)
+        f.addRow(now)
+        self._load_branches()
+        return w
+
+    def _fill_branches(self, built=None):
+        current = self.upd_branch.currentData() if self.upd_branch.count() else self.s.update_branch
+        self.upd_branch.blockSignals(True)
+        self.upd_branch.clear()
+        for key, label in self._branch_items.items():
+            if built is not None and key and key in built and not built[key]:
+                label += "  (no build yet)"
+            self.upd_branch.addItem(label, key)
+        self.upd_branch.setCurrentIndex(max(0, self.upd_branch.findData(current or "")))
+        self.upd_branch.blockSignals(False)
+
+    def _load_branches(self):
+        from PySide6.QtCore import QThreadPool
+        from .update_ui import BranchListJob
+        self.upd_refresh.setEnabled(False)
+        self.upd_status.setText("Loading branches from GitHub…")
+        job = BranchListJob()
+        job.signals.branches.connect(self._branches_loaded)
+        QThreadPool.globalInstance().start(job)
+
+    def _branches_loaded(self, branches, err):
+        try:
+            self.upd_refresh.setEnabled(True)
+        except RuntimeError:            # dialog already closed
+            return
+        if err:
+            self.upd_status.setText(f"Couldn't load the branch list ({err}).")
+            return
+        for name, _ in branches:
+            self._branch_items.setdefault(name, name)
+        self._fill_branches({name: has for name, has in branches})
+        self.upd_status.setText(f"{len(branches)} branches on GitHub.")
+
+    def _check_now(self):
+        self._apply()
+        if self.parent() is not None and hasattr(self.parent(), "updates"):
+            self.parent().updates.check(manual=True)
+
     def _model(self):
         from ..align import MODEL_INFO, ModelStore
         w, f = self._form()
@@ -202,7 +295,15 @@ class OptionsDialog(QDialog):
         s.restore_session = self.restore.isChecked()
         s.export_folder = self.export_dir.text().strip()
         s.disclaimer_acknowledged = not self.disclaimer.isChecked()
+        old_branch = s.update_branch
+        s.update_check = self.upd_check.isChecked()
+        s.update_auto_install = self.upd_auto.isChecked()
+        s.update_branch = self.upd_branch.currentData() or ""
         s.save()
+        if s.update_branch != old_branch and self.parent() is not None and hasattr(self.parent(), "updates"):
+            from .. import updater
+            if updater.target_track(s.update_branch) != updater.target_track(old_branch):
+                self.parent().updates.on_branch_changed()
         if self.parent() is not None and hasattr(self.parent(), "apply_options"):
             self.parent().apply_options(reset_ack=self.reset_ack)
 

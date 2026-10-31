@@ -363,6 +363,14 @@ Download the DMG for your Mac (`AppleSilicon` or `Intel`), open it and drag Lyri
 > xattr -cr /Applications/Lyridan.app
 > ```
 
+### Updates
+Lyridan checks for a newer build each time it starts (Windows installer, Windows portable zip and macOS app in Applications).
+- By default the update downloads in the background and installs the **next time you start Lyridan**: the app closes, updates itself and opens again. A bar at the top of the window says when one is ready (**Restart and update now** installs it right away).
+- Turn off *Download updates in the background…* in **Edit → Options → Updates** to be asked first (**Update now / What's new / Skip this build**). **Help → Check for updates…** checks by hand.
+- **Update from branch:** *Automatic* follows the branch your build came from (stable builds follow `main`). You can pick any other branch that has builds (the old `v1.1.1` branch isn't offered). Switching installs that branch's newest build, even if it's older.
+- If an update fails it isn't retried automatically, and a build you installed yourself that is older than the newest one is never replaced without asking.
+- Running a downloaded `Setup.exe` over an existing install (older or newer) updates it in place. It uses the same folder, asks you to close a running Lyridan, and replaces the old program files completely. Settings are kept.
+
 ---
 
 ## Command line
@@ -398,9 +406,12 @@ Every push runs the tests, then `.github/workflows/build.yml` builds:
 
 Each frozen app is smoke-tested before packaging.
 
+Every branch except `v1.1.1` is built on push. `main` / `v*` tags publish `v<VERSION>` (the "latest" release), `dev` publishes the rolling `dev-latest` pre-release and every other branch publishes `<branch>-latest`. Each release carries an `update.json` manifest (version, commit, CI run number, SHA-256 of every installer) that the auto-updater reads (`lyridan/updater.py`, `lyridan/update_channels.py`, `tools/make_update_manifest.py`). Deleting a branch removes its rolling release (`cleanup-branch-builds.yml`, which runs from `main`).
+
 | Push to | Channel | Version shown | Published as |
 |---|---|---|---|
-| `dev` (or any other branch) | dev | `2.0.0-dev.<run> (<commit>)` + DEV badge | rolling pre-release **dev-latest** + workflow artifacts |
+| `dev` | dev | `2.0.0-dev.<run> (<commit>)` + DEV badge | rolling pre-release **dev-latest** + workflow artifacts |
+| any other branch (not `v1.1.1`) | dev | same as `dev` | rolling pre-release **&lt;branch&gt;-latest** + workflow artifacts |
 | `main` | stable | `2.0.0` | GitHub release **v2.0.0** |
 | tag `v*` | stable | `2.0.0` | release for that tag |
 

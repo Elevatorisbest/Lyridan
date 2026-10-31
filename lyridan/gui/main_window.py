@@ -150,7 +150,7 @@ def _caption(text: str) -> QLabel:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, update_startup=None):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} {buildinfo.display_version()}"
                             + ("  [DEV BUILD]" if buildinfo.is_dev() else ""))
@@ -191,6 +191,9 @@ class MainWindow(QMainWindow):
             tag.setToolTip(buildinfo.as_text())
             self.statusBar().addPermanentWidget(tag)
         self.apply_options()
+        from .update_ui import UpdateController
+        self.updates = UpdateController(self, update_startup)
+        QTimer.singleShot(3000, self.updates.check_on_launch)
         QTimer.singleShot(0, self.restore_session)
         self.statusBar().showMessage("Loading language dictionaries…")
         w = _Warmup()
@@ -252,6 +255,11 @@ class MainWindow(QMainWindow):
         a.triggered.connect(self.edit_ja_dict)
         dm.addAction(a)
         hm = mb.addMenu("&Help")
+        a = QAction("Check for updates…", self)
+        a.setMenuRole(QAction.ApplicationSpecificRole)
+        a.triggered.connect(lambda: self.updates.check(manual=True))
+        hm.addAction(a)
+        hm.addSeparator()
         a = QAction("About Lyridan", self)
         a.triggered.connect(lambda: QMessageBox.about(self, "About Lyridan", about_text()))
         hm.addAction(a)
