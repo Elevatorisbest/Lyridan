@@ -177,6 +177,11 @@ def _indicator_images(c: dict) -> tuple:
     return tuple(out)
 
 
+def _counter_family() -> str:
+    from .fonts import counter_family
+    return counter_family()
+
+
 def apply_theme(app: QApplication, theme: str, font_pt: int = 0) -> None:
     global _default_palette, _default_font
     if _default_palette is None:
@@ -258,7 +263,7 @@ QFrame#ToolCluster {{ background: {c['bg']}; border: 1px solid {c['border']}; bo
 QFrame#ToolCluster QLabel#ClusterCaption, QLabel#ClusterCaption {{ color: {c['muted']}; font-weight: bold;
     background: transparent; }}
 QLabel#FileLcd {{ background: {c.get('clock_bg', c['entry_bg'])}; color: {c.get('clock_fg', c['entry_fg'])};
-    border: 1px solid {c['border']}; border-radius: 2px; padding: 1px 6px; }}
+    border: 1px solid {c['border']}; border-radius: 2px; padding: 1px 6px; font-family: "{_counter_family()}"; }}
 QLabel#FileInfo {{ color: {c['muted']}; background: transparent; }}
 QSlider::groove:horizontal {{ height: 4px; background: {c['border']}; border-radius: 2px; }}
 QSlider::handle:horizontal {{ background: {c['accent']}; width: 12px; margin: -5px 0; border-radius: 6px; }}

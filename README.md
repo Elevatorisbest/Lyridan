@@ -368,8 +368,8 @@ Download the DMG for your Mac (`AppleSilicon` or `Intel`), open it and drag Lyri
 
 ### Updates
 Lyridan checks for a newer build each time it starts (Windows installer, Windows portable zip and macOS app in Applications).
-- By default the update downloads in the background and installs the **next time you start Lyridan**: the app closes, updates itself and opens again. A bar at the top of the window says when one is ready (**Restart and update now** installs it right away).
-- Turn off *Download updates in the background…* in **Edit → Options → Updates** to be asked first (**Update now / What's new / Skip this build**). **Help → Check for updates…** checks by hand.
+- By default a bar at the top of the window offers the new build: **Update now / What's new / Skip this build**. **Update now** downloads it, closes Lyridan, installs it and opens it again. **Help → Check for updates…** checks by hand.
+- Turn on *Download updates in the background…* in **Edit → Options → Updates** to have updates download on their own and install the **next time you start Lyridan** (the bar then offers **Restart and update now**).
 - **Update from branch:** *Automatic* follows the branch your build came from (stable builds follow `main`). You can pick any other branch that has builds (the old `v1.1.1` branch and the `workflowtest` / `digitalstudiothemetest` test branches aren't offered). Switching installs that branch's newest build, even if it's older.
 - If an update fails it isn't retried automatically, and a build you installed yourself that is older than the newest one is never replaced without asking.
 - Running a downloaded `Setup.exe` over an existing install (older or newer) updates it in place. It uses the same folder, asks you to close a running Lyridan, and replaces the old program files completely. Settings are kept.
@@ -459,6 +459,7 @@ Lyridan is **GPL-2.0**. It uses:
 - the CMU Pronouncing Dictionary (BSD)
 - ONNX Runtime (MIT), NumPy (BSD), soundfile / libsndfile (BSD / LGPL), python-soxr (LGPL), certifi (MPL-2.0)
 - OpenCorpora data via pymorphy3 (CC BY-SA, ё list)
+- the toolbar LCD font *Lyridan Counter*, a modified [Inter](https://github.com/rsms/inter) by The Inter Project Authors (SIL Open Font License 1.1, `assets/fonts/OFL.txt`)
 
 ### Alignment model
 The optional alignment model is **not** part of Lyridan's code or installers. It is downloaded separately on first use.

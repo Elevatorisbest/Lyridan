@@ -79,7 +79,7 @@ class Settings:
 
     # ---- updates (Options → Updates; see lyridan/updater.py) ------------------------
     update_check: bool = True              # look for a newer build when Lyridan starts
-    update_auto_install: bool = True       # download in the background, install on the next start
+    update_auto_install: bool = False      # True: download in the background, install on the next start
     update_branch: str = ""                # "" = the branch this build came from; "main" = stable releases
 
     # ---- other exports ------------------------------------------------------

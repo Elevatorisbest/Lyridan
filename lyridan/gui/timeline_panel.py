@@ -79,9 +79,7 @@ class TimelinePanel(QWidget):
         self.time_label = QLabel("0:00.000")
         self.time_label.setObjectName("MainCounter")
         f = self.time_label.font()
-        f.setFamily("Consolas" if os.name == "nt" else "Menlo")
-        f.setBold(True)
-        self.time_label.setFont(f)
+        self.time_label.setFont(f)              # family / size come from style_counters
         self.time_label.setMinimumWidth(90)
         self._clock_pt = f.pointSizeF() if f.pointSizeF() > 0 else 10.0
         self.speed = QComboBox()
@@ -338,11 +336,6 @@ class TimelinePanel(QWidget):
         lab.setObjectName(name)
         lab.setToolTip(tip)
         lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        f = lab.font()
-        f.setFamily("Consolas" if os.name == "nt" else "Menlo")
-        f.setStyleHint(f.StyleHint.Monospace)
-        f.setBold(True)
-        lab.setFont(f)
         return lab
 
     # ------------------------------------------------------------------ data
@@ -414,7 +407,8 @@ class TimelinePanel(QWidget):
         fg = colors.get("clock_fg") or "#3fe06a"
         edge = colors.get("border") or "#000000"
         base = self._clock_pt * self.counter_scale
-        family = "Consolas" if os.name == "nt" else "Menlo"
+        from .fonts import counter_family
+        family = counter_family()
         for lab, scale, pad, sample in ((self.time_label, 1.75, "2px 8px", "00:00.000"),
                                         (self.sub_counter, 1.25, "1px 10px", "000| 0| 000"),
                                         (self.line_start, 1.0, "1px 6px", "0:00.000"),
@@ -423,10 +417,9 @@ class TimelinePanel(QWidget):
                                         (self.tempo_lcd, 1.0, "1px 6px", "♩ 000.0"),
                                         (self.meter_lcd, 1.0, "1px 6px", "00/00")):
             f = QFont(family)
-            f.setBold(True)
             f.setPointSizeF(base * scale)
             lab.setFont(f)
-            css = f'font-family: "{family}"; font-weight: bold; font-size: {base * scale:.1f}pt;'
+            css = f'font-family: "{family}"; font-weight: normal; font-size: {base * scale:.1f}pt;'
             self._lcd_font_css[lab] = css
             lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             lab.setMinimumWidth(QFontMetrics(f).horizontalAdvance(sample) + (26 if scale > 1 else 16))

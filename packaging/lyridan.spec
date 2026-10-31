@@ -12,6 +12,7 @@ from lyridan import VERSION  # noqa: E402
 datas = [
     (os.path.join(ROOT, "lyridan", "data"), os.path.join("lyridan", "data")),
     (os.path.join(ROOT, "assets", "lyridanlogo.ico"), "assets"),
+    (os.path.join(ROOT, "assets", "fonts"), os.path.join("assets", "fonts")),   # toolbar LCD font (OFL)
 ]
 datas += collect_data_files("unidic_lite")
 datas += collect_data_files("certifi")

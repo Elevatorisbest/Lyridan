@@ -47,6 +47,8 @@ def run() -> int:
     app.setApplicationVersion(VERSION)
     app.setOrganizationName("Elevatorisbest")
     app.setStyle("Fusion")
+    from .fonts import load_bundled_fonts
+    load_bundled_fonts()
     win = MainWindow(update_startup=startup)
     win.show()
     for arg in sys.argv[1:]:
