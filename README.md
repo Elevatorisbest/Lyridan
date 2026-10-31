@@ -1,9 +1,9 @@
+# This is the old version of Lyridan from before the v2.0.0 remake. It is unsupported and completely obsolete. Please use the current newest version of Lyridan instead for full capabilities and support.
+
 # Lyridan
 ![lyridanlogo](https://github.com/user-attachments/assets/335da193-0a28-4bf8-8848-3dcc610e3332)
 <img width="1000" height="700" alt="Example of lrc romanization and syllabization" src="https://github.com/user-attachments/assets/3d72db12-5c38-403e-8180-08ceb62d1e27" />
-
-
-
+ 
 
 ## What is it?
 Lyridan is an experimental program that syllabizes and romanizes/transliterates .lrc lyric files. 
