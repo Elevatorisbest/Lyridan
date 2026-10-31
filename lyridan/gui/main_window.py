@@ -338,6 +338,7 @@ class MainWindow(QMainWindow):
         cap = QLabel("AUDIO")
         cap.setObjectName("ClusterCaption")
         cap.setFixedWidth(58)
+        self._file_captions = [self.lyrics_card.title, self.beat_card.title, cap]   # widths scale with the text
         tl.audio_label.setObjectName("FileLcd")
         tl.audio_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         tl.audio_label.setMinimumWidth(90)
@@ -1412,16 +1413,48 @@ class MainWindow(QMainWindow):
         (instead of all of it going to the session file names)."""
         lay = self._toolbar.layout()
         for c in self._clusters:
-            c.ensurePolished()
-            w = c.sizeHint().width()
+            w = c.sizeHint().width()          # (no ensurePolished: it pins the clocks' fonts, see style_counters)
             if c is self._clusters[0]:
-                w = max(w, self.SESSION_BASE_WIDTH)
+                w = max(w, int(self.SESSION_BASE_WIDTH * (getattr(self, "_toolbar_scale", 0.0) or 1.0)))
             lay.setStretchFactor(c, max(1, w))
+
+    BASE_SIZE = (1380, 860)                    # default window: toolbar text scales up from here
+
+    def _ui_scale(self) -> float:
+        s = min(self.width() / self.BASE_SIZE[0], self.height() / self.BASE_SIZE[1])
+        return max(1.0, round(s * 20) / 20)    # steps of 5 % so dragging the edge doesn't restyle constantly
+
+    def _scale_toolbar(self):
+        """Toolbar text and clocks grow with the window, like the preview and the timeline lanes."""
+        if not hasattr(self, "_toolbar"):
+            return
+        s = self._ui_scale()
+        if abs(s - getattr(self, "_toolbar_scale", 0.0)) < 0.01:
+            return
+        self._toolbar_scale = s
+        base = QApplication.instance().font().pointSizeF()
+        self._toolbar.setStyleSheet("" if s == 1.0 or base <= 0 else
+                                    f"QWidget {{ font-size: {base * s:.1f}pt; }}")
+        self.timeline.set_counter_scale(s)
+        from PySide6.QtGui import QFontMetrics
+        f = QFont(QApplication.instance().font())
+        f.setBold(True)
+        f.setPointSizeF(max(1.0, base) * s)
+        need = max(QFontMetrics(f).horizontalAdvance(c.text()) for c in self._file_captions) + 6
+        for c in self._file_captions:
+            c.setFixedWidth(58 if s == 1.0 else max(int(58 * s), need))
+        self._update_toolbar_stretch()
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._scale_toolbar()
 
     def apply_options(self, reset_ack: bool = False):
         from .themes import apply_theme, current_colors
         app = QApplication.instance()
         apply_theme(app, self.settings.theme, self.settings.ui_font_pt)
+        self._toolbar_scale = 0.0               # re-apply for the (possibly new) base text size
+        self._scale_toolbar()
         self._update_toolbar_stretch()
         colors = current_colors(self.settings.theme)
         vocals = colors.get("vocals") or (colors["accent"] if self.settings.theme != "light" else "#2e8b57")

@@ -392,15 +392,29 @@ class TimelinePanel(QWidget):
         frame = acc if getattr(self, "_range_shown", False) else edge
         for lab in (self.line_start, self.line_end, self.line_len):
             lab.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {frame}; border-radius: 2px; "
-                              "padding: 1px 6px;")
+                              f"padding: 1px 6px; {self._lcd_font_css.get(lab, '')}")
+
+    counter_scale = 1.0          # > 1 in a window bigger than the default (set by the main window)
+
+    def set_counter_scale(self, scale: float):
+        scale = max(1.0, scale)
+        if abs(scale - self.counter_scale) > 0.01:
+            self.counter_scale = scale
+            if getattr(self, "_counter_colors", None) is not None:
+                self.style_counters(self._counter_colors)
 
     def style_counters(self, colors: dict):
-        """Edit-window counters: green (or the theme's clock colour) digits on a black LCD, in every theme."""
-        from PySide6.QtGui import QFontMetrics
+        """Edit-window counters: green (or the theme's clock colour) digits on a black LCD, in every theme.
+        The font goes into the style sheet (not setFont): Qt puts a widget's first-polish font back
+        whenever style sheets are re-applied, which used to shrink the clocks to the normal text size."""
+        from PySide6.QtGui import QFont, QFontMetrics
+        self._counter_colors = colors
+        self._lcd_font_css = {}
         bg = colors.get("clock_bg") or "#0b0c0d"
         fg = colors.get("clock_fg") or "#3fe06a"
         edge = colors.get("border") or "#000000"
-        base = self._clock_pt
+        base = self._clock_pt * self.counter_scale
+        family = "Consolas" if os.name == "nt" else "Menlo"
         for lab, scale, pad, sample in ((self.time_label, 1.75, "2px 8px", "00:00.000"),
                                         (self.sub_counter, 1.25, "1px 10px", "000| 0| 000"),
                                         (self.line_start, 1.0, "1px 6px", "0:00.000"),
@@ -408,13 +422,16 @@ class TimelinePanel(QWidget):
                                         (self.line_len, 1.0, "1px 6px", "0:00.000"),
                                         (self.tempo_lcd, 1.0, "1px 6px", "♩ 000.0"),
                                         (self.meter_lcd, 1.0, "1px 6px", "00/00")):
-            f = lab.font()
+            f = QFont(family)
+            f.setBold(True)
             f.setPointSizeF(base * scale)
             lab.setFont(f)
+            css = f'font-family: "{family}"; font-weight: bold; font-size: {base * scale:.1f}pt;'
+            self._lcd_font_css[lab] = css
             lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             lab.setMinimumWidth(QFontMetrics(f).horizontalAdvance(sample) + (26 if scale > 1 else 16))
             lab.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {edge}; border-radius: 2px; "
-                              f"padding: {pad};")
+                              f"padding: {pad}; {css}")
         acc = colors.get("accent") or "#3b82d6"
         if acc.lower() == edge.lower():           # e.g. Lyridan Dark: yellow frames already
             acc = "#ffffff"
