@@ -1,0 +1,7 @@
+-r requirements.txt
+pyinstaller>=6.10
+pytest>=8
+# only needed to rebuild the bundled language data (tools/)
+cmudict>=1.0
+pymorphy3>=2.0
+pymorphy3-dicts-ru

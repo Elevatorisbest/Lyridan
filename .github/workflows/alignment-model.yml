@@ -1,0 +1,71 @@
+name: Publish alignment model
+
+# Builds the int8 ONNX version of Meta's MMS forced-alignment model and publishes it as the
+# "alignment-model-v1" release, from which Lyridan downloads it on first use.
+# Runs when the export script changes (only if the release does not exist yet) or manually.
+on:
+  push:
+    branches: [ "dev", "main" ]
+    paths:
+      - tools/export_alignment_model.py
+      - .github/workflows/alignment-model.yml
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild and replace the model even if the release exists"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  TAG: alignment-model-v1
+
+jobs:
+  model:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Already published?
+        id: check
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [ "${{ inputs.force }}" != "true" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release $TAG exists - nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.exists == 'false'
+        with:
+          python-version: "3.12"
+      - name: Export model
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx onnxruntime
+          python tools/export_alignment_model.py model
+          ls -la model
+      - name: Publish release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cat > notes.md <<'NOTES'
+          Alignment model used by Lyridan's **experimental** "align .lrc to song audio" feature.
+          Lyridan downloads these files automatically on first use - you do not need to download them yourself.
+
+          **Model:** MMS multilingual forced aligner (`torchaudio.pipelines.MMS_FA`) by Meta AI -
+          V. Pratap et al., *Scaling Speech Technology to 1,000+ Languages*, 2023 (https://arxiv.org/abs/2305.13516).
+
+          **Changes made by the Lyridan project:** exported to ONNX (waveform normalisation moved out of the
+          graph) and weights quantized to 8-bit integers. Outputs are log-probabilities over the same 28 labels.
+
+          **Licence:** CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/) - **non-commercial use only**,
+          inherited from the original MMS checkpoint. This licence applies to the model files only; Lyridan's
+          source code remains GPL-2.0.
+          NOTES
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "$TAG" model/mms_fa_int8.onnx model/mms_fa_int8.json --repo "$GITHUB_REPOSITORY" \
+            --title "Alignment model v1 (MMS forced aligner, int8 ONNX, CC BY-NC 4.0)" --notes-file notes.md \
+            --prerelease --latest=false --target "$GITHUB_SHA"

@@ -1,0 +1,195 @@
+name: Build Lyridan
+
+# main branch  -> stable builds (plain version) + GitHub release "v<VERSION>" (marked latest)
+# v* tags      -> stable builds + release for that tag
+# dev branch   -> development builds (granular build info inside the app) + rolling "dev-latest" pre-release
+# other branch -> development builds + rolling "<branch>-latest" pre-release
+#                 (v1.1.1 is the old 1.x app; workflowtest / digitalstudiothemetest are test branches -
+#                 none of them are built here)
+# Every release gets an update.json manifest that Lyridan's auto-updater reads
+# (see lyridan/update_channels.py and tools/make_update_manifest.py).
+on:
+  push:
+    branches: [ "**", "!v1.1.1", "!workflowtest", "!digitalstudiothemetest" ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install fugashi unidic-lite numpy soundfile pytest
+      - name: Tests
+        run: python -m pytest -q tests
+
+  windows:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      channel: ${{ steps.ver.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history: commit counts / messages for dev build info
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build info (dev = detailed, main/tag = stable)
+        id: ver
+        shell: bash
+        run: |
+          V=$(python tools/write_build_info.py --json-out build_info.json)
+          C=$(python -c "import json,sys; sys.path.insert(0,'.'); from lyridan._build import BUILD_INFO as b; print(b['channel'])")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "channel=$C" >> "$GITHUB_OUTPUT"
+          echo "### Windows build $V ($C)" >> "$GITHUB_STEP_SUMMARY"
+      - name: PyInstaller
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/lyridan.spec
+      - name: Smoke test (frozen app converts English + Japanese)
+        shell: bash
+        run: |
+          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/test_song.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          ./dist/Lyridan/Lyridan.exe convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
+          for i in 1 2 3 4 5 6 7 8 9 10; do [ -f smoke_en.xml ] && [ -f smoke_ja.xml ] && break; sleep 2; done
+          grep -q 'lyric="Ki-"' smoke_ja.xml
+          grep -q 'count="419"' smoke_en.xml
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.ver.outputs.version }} packaging\windows\lyridan.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\Lyridan\* -DestinationPath dist\Lyridan-${{ steps.ver.outputs.version }}-Windows-x64-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: build_info.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-${{ steps.ver.outputs.version }}-Windows-x64
+          path: |
+            dist/*Setup.exe
+            dist/*portable.zip
+
+  macos:
+    needs: test
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15          # Apple Silicon (arm64)
+            arch: AppleSilicon
+          - runner: macos-15-intel    # Intel (x86_64) - also for Hackintosh
+            arch: Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build info (dev = detailed, main/tag = stable)
+        id: ver
+        run: |
+          V=$(python tools/write_build_info.py)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "### macOS ${{ matrix.arch }} build $V" >> "$GITHUB_STEP_SUMMARY"
+      - name: PyInstaller
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/lyridan.spec
+      - name: Smoke test (frozen app converts English + Japanese)
+        run: |
+          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/test_song.ttml -b tests/fixtures/baby_be_mine_bass.xml -o smoke_en.xml
+          dist/Lyridan.app/Contents/MacOS/Lyridan convert tests/fixtures/japanese_sample.ttml --no-source-romaji -o smoke_ja.xml
+          grep -q 'lyric="Ki-"' smoke_ja.xml
+          grep -q 'count="419"' smoke_en.xml
+          file dist/Lyridan.app/Contents/MacOS/Lyridan
+      - name: Installer (.pkg) and disk image (.dmg)
+        run: |
+          bash packaging/macos/make_pkg.sh "${{ steps.ver.outputs.version }}" "${{ matrix.arch }}"
+          bash packaging/macos/make_dmg.sh "${{ steps.ver.outputs.version }}" "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lyridan-${{ steps.ver.outputs.version }}-macOS-${{ matrix.arch }}
+          path: |
+            dist/*.pkg
+            dist/*.dmg
+
+  publish:
+    needs: [windows, macos]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION_LABEL: ${{ needs.windows.outputs.version }}
+      CHANNEL: ${{ needs.windows.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish
+        run: |
+          mkdir -p meta
+          mv artifacts/build_info.json meta/build_info.json
+          ls -la artifacts
+          BRANCH=$(python3 -c "import json; print(json.load(open('meta/build_info.json'))['branch'])")
+          if [ "$CHANNEL" = "dev" ]; then
+            TAG=$(python3 tools/make_update_manifest.py --tag-for "$BRANCH")
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="v$VERSION_LABEL"
+          fi
+          echo "release tag: $TAG"
+          # manifest for the auto-updater; uploaded last so it never points at files that aren't there yet
+          python3 tools/make_update_manifest.py --info meta/build_info.json --dir artifacts --tag "$TAG" \
+            --out meta/update.json
+          if [ "$CHANNEL" = "dev" ]; then
+            # rolling pre-release that always holds the newest build of this branch
+            NOTES=$(printf 'Automatic build of `%s` @ %s (run #%s). Not a stable release.\n\n<!-- lyridan-branch: %s -->' \
+              "$BRANCH" "${GITHUB_SHA::7}" "$GITHUB_RUN_NUMBER" "$BRANCH")
+            gh release delete "$TAG" --yes --cleanup-tag || true
+            gh release create "$TAG" artifacts/* --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Development build $VERSION_LABEL ($BRANCH)" --notes "$NOTES"
+          else
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" artifacts/* --clobber
+            else
+              gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" --title "Lyridan $VERSION_LABEL" \
+                --generate-notes --latest
+            fi
+          fi
+          gh release upload "$TAG" meta/update.json --clobber
