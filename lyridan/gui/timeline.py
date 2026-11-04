@@ -9,8 +9,8 @@ Row names live in a fixed gutter on the left so they never smear while scrolling
 
 Keyboard (the timeline has the keyboard by default; a value field you click into borrows it
 until you press Enter / Esc or click elsewhere - see keyboard_focus.py):
-  ← →           move the playhead (step set in Options; speeds up while held)
-  Shift + ← →   4× bigger steps          Ctrl/Alt + ← →  previous / next lyric line
+  ← →           tap: step the playhead (step set in Options) · hold: smooth fast forward / rewind
+  Shift + ← →   4× steps / 2× shuttle    Ctrl/Alt + ← →  previous / next lyric line
   PgUp / PgDn   previous / next section  Home / End      start / end of the song
   ↑ ↓           zoom in / out            Space           play / pause
   Enter         play the current line    F               fit the whole song
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 
@@ -131,6 +131,8 @@ class TimelineCanvas(QWidget):
     rangeSelected = Signal(float, float)   # Shift + drag: a play / loop range (chart seconds)
     rangeCleared = Signal()                # Shift + click without dragging
     loopKeyRequested = Signal()            # L
+    shuttleStarted = Signal(int)           # ← / → held: move continuously (-1 rewind, +1 fast forward)
+    shuttleStopped = Signal()              # ... released
 
     ROW_RULER = 26
     ROW_SECTIONS = 20
@@ -190,6 +192,13 @@ class TimelineCanvas(QWidget):
         self.arrow_step = "beat"
         self.accelerate = True
         self._held = 0
+        self._hold_key: Optional[int] = None          # ← / → being held (tap = step, hold = shuttle)
+        self._hold_mods = Qt.NoModifier
+        self._shuttling = False
+        self._hold_timer = QTimer(self)
+        self._hold_timer.setSingleShot(True)
+        self._hold_timer.setInterval(self.SHUTTLE_DELAY_MS)
+        self._hold_timer.timeout.connect(self._hold_timeout)
         self._drag = None                             # ("scrub", ) | ("pan", x0, scroll0)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -806,6 +815,7 @@ class TimelineCanvas(QWidget):
     def focusOutEvent(self, ev):
         super().focusOutEvent(ev)
         self._held = 0
+        self._end_hold()
         self.focusChanged.emit(False)
 
     def grid_times(self) -> List[float]:
@@ -864,15 +874,14 @@ class TimelineCanvas(QWidget):
             if mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier):
                 self._nav_anchor = self._line_target(t, sign)
                 self.navRequested.emit(self._nav_anchor)
-            else:
-                self._held = self._held + 1 if ev.isAutoRepeat() else 0
-                mult = 1
-                if self.accelerate:
-                    mult = 1 if self._held < 8 else 2 if self._held < 20 else 4 if self._held < 40 else 8
-                if mods & Qt.ShiftModifier:
-                    mult *= 4
-                self._nav_anchor = self._step(t, sign * mult)
-                self.navRequested.emit(self._nav_anchor)
+            elif not ev.isAutoRepeat():
+                # tap = one grid step (on release); held past SHUTTLE_DELAY_MS = smooth shuttle.
+                # Nothing moves on the press itself, so a hold starts gliding without a jump.
+                if self._hold_key is not None and self._hold_key != key:
+                    self._end_hold()                    # the other arrow: switch direction
+                self._hold_key, self._hold_mods = key, mods
+                self._hold_timer.start()
+            # auto-repeats of a held arrow are ignored: the shuttle moves on its own
         elif key in (Qt.Key_PageUp, Qt.Key_PageDown):
             self.navRequested.emit(self._section_target(t, -1 if key == Qt.Key_PageUp else 1))
         elif key == Qt.Key_Home:
@@ -900,7 +909,35 @@ class TimelineCanvas(QWidget):
             return
         ev.accept()     # navigation keys never reach other widgets
 
+    SHUTTLE_DELAY_MS = 200       # holding ← / → this long starts the smooth shuttle
+
+    def _hold_timeout(self):
+        if self._hold_key is not None and not self._shuttling:
+            self._shuttling = True
+            self.shuttleStarted.emit(-1 if self._hold_key == Qt.Key_Left else 1)
+
+    def _end_hold(self):
+        self._hold_timer.stop()
+        self._hold_key = None
+        if self._shuttling:
+            self._shuttling = False
+            self.shuttleStopped.emit()
+
+    def _tap_step(self, key, mods):
+        sign = -1 if key == Qt.Key_Left else 1
+        mult = 4 if mods & Qt.ShiftModifier else 1
+        self._nav_anchor = self._step(self._nav_from(), sign * mult)
+        self.navRequested.emit(self._nav_anchor)
+
     def keyReleaseEvent(self, ev):
+        if not ev.isAutoRepeat() and ev.key() in (Qt.Key_Left, Qt.Key_Right) and ev.key() == self._hold_key:
+            tap = not self._shuttling
+            key, mods = self._hold_key, self._hold_mods
+            self._end_hold()
+            if tap:
+                self._tap_step(key, mods)
+            ev.accept()
+            return
         if not ev.isAutoRepeat():
             self._held = 0
         ev.accept()
@@ -1236,8 +1273,9 @@ SHORTCUTS_HTML = """
 value field - Enter, Esc or a click elsewhere gives them back; buttons, check boxes and
 drop-downs never take them, so they can't change your settings by accident):
 <table cellspacing=4>
-<tr><td><b>← →</b></td><td>move the playhead (step set in Options; speeds up while held)</td></tr>
-<tr><td><b>Shift + ← →</b></td><td>4× bigger steps</td></tr>
+<tr><td><b>← →</b></td><td>tap: step the playhead (step set in Options) · hold: smooth fast forward /
+rewind (speeds set in Options; Shift = twice as fast)</td></tr>
+<tr><td><b>Shift + ← →</b></td><td>4× bigger steps · twice as fast while held</td></tr>
 <tr><td><b>Ctrl/Alt + ← →</b></td><td>previous / next lyric line</td></tr>
 <tr><td><b>PgUp / PgDn</b></td><td>previous / next section</td></tr>
 <tr><td><b>Home / End</b></td><td>start / end of the song</td></tr>

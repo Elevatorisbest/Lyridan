@@ -158,16 +158,19 @@ The timeline always has the keyboard, so the keys below work straight away, play
 - Press **Enter** or **Esc**, or click anywhere else, and the keyboard goes back to the timeline.
 - **Tab** never moves the keyboard into the settings. The ⌨ button lists the keys.
 
-Fast-forwarding and rewinding while the song plays is smooth:
+**Tap ← / →** to step the playhead one grid step. **Hold ← / →** to fast forward or rewind smoothly, like a tape shuttle:
 
-- Holding ← or → steps evenly, one grid step per key repeat.
-- The playhead never jumps back.
-- The audio cross-fades at each jump instead of clicking.
+- After a fifth of a second the playhead glides continuously at the **fast forward / rewind speed** you set in Options (default 4× real time). The view scrolls along with it.
+- While playing you hear it: sped up when fast forwarding, backwards when rewinding. Normal playback carries on when you let go.
+- While paused it glides silently.
+- **Shift** doubles the speed. With **Speed up the longer ← / → is held** (on by default) it rises to 4× that after 4 seconds.
+- The **◀◀ / ▶▶** buttons do the same: a click jumps to the previous / next line, press and hold to rewind / fast forward.
+- Jumps (taps, clicks, loops) cross-fade the audio instead of clicking, and the playhead never jumps back.
 
 | Key | Action |
 |---|---|
-| ← → | step the playhead (1/4 beat … 1 bar, set in Options; speeds up while held) |
-| Shift + ← → | 4× bigger steps |
+| ← → | tap: step the playhead (1/4 beat … 1 bar, set in Options) · hold: smooth rewind / fast forward |
+| Shift + ← → | 4× bigger steps · twice as fast while held |
 | Ctrl/Alt + ← → | previous / next lyric line |
 | PgUp / PgDn | previous / next section |
 | Home / End | start / end of the song |
@@ -287,10 +290,10 @@ Contractions, possessives, elongated words (*ooooh*) and hyphenated words are ha
 Open them with the **⚙ Options** button at the right end of the toolbar (or Edit → Options):
 
 - **Themes and text sizes**
-- **Playback defaults**, the **timeline arrow-key step** and whether clicking the preview, overview, transport buttons or clocks gives the timeline the keyboard
+- **Playback defaults**, the **arrow-key step** and the **fast forward / rewind speeds** (Timeline & playback)
 - **Reopening the last session** and the **default export folder**
 - **Notices:** the export disclaimer and resetting dismissed notices
-- **Alignment model management** and **About this build**
+- **Alignment model management** and **About this build** (in dev builds, clicking the orange **DEV** badge at the bottom right opens it too)
 
 | Theme | Look |
 |---|---|
@@ -305,6 +308,7 @@ Open them with the **⚙ Options** button at the right end of the toolbar (or Ed
 | Digital Studio Light | light version of Digital Studio, inspired by a classic DAW edit window |
 | Studio Console | dark, inspired by an analogue mixing console strip |
 | Studio Console Light | light, inspired by a different analogue console strip |
+| Cyber Pink | dark, full black with magenta-pink, neon green and a touch of purple |
 
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>
@@ -350,6 +354,10 @@ Open them with the **⚙ Options** button at the right end of the toolbar (or Ed
 **Studio Console Light**
 
 ![Studio Console Light theme](docs/screenshots/theme_studio_console_light.png)
+
+**Cyber Pink**
+
+![Cyber Pink theme](docs/screenshots/theme_cyber_pink.png)
 
 </details>
 
@@ -424,7 +432,7 @@ Every branch except `v1.1.1` and the test branches `workflowtest` / `digitalstud
 | `main` | stable | `2.0.0` | GitHub release **v2.0.0** |
 | tag `v*` | stable | `2.0.0` | release for that tag |
 
-- **Dev builds** show full build info in **Options → About this build**: branch, commit, message, build number, build machine, workflow run link and library versions, with a "Copy build info" button.
+- **Dev builds** show full build info in **Options → About this build** (or click the **DEV** badge at the bottom right): branch, commit, message, build number, build machine, workflow run link and library versions, with a "Copy build info" button.
 - **New release:** bump `VERSION` in `lyridan/__init__.py` before merging to `main`. If `VERSION` wasn't bumped, the files of the existing release are re-uploaded.
 - **Local builds** are dev builds unless you pass `--channel stable`.
 - `python -m lyridan --version` prints the same build info.

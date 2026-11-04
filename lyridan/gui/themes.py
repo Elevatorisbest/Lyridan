@@ -1,7 +1,7 @@
 """Application themes.
 
-System, Light, Dark, the original Lyridan Dark (black & yellow) and four themed
-palettes. Every theme gets clearly drawn check boxes (a tick on the accent colour
+System, Light, Dark, the original Lyridan Dark (black & yellow) and the themed
+palettes below. Every theme gets clearly drawn check boxes (a tick on the accent colour
 when on, an empty outlined box when off), generated as small PNGs at runtime.
 Optional keys per theme: ``wave`` (timeline waveform), ``clock_bg`` / ``clock_fg``
 (the transport time display), ``group_title`` (settings group headings).
@@ -107,6 +107,16 @@ THEMES = {
         "accent": "#1f8a8f", "group_title": "#1c6a70", "vocals": "#2d62b4", "wave": "#2d5fb0",
         "clock_bg": "#0b1430", "clock_fg": "#5bb8ff", "playhead": "#d8392f",
     },
+    # full black with hot magenta-pink accents, neon green counters / toggles / playhead and a touch
+    # of purple (selections, waveform)
+    "cyber_pink": {
+        "name": "Cyber Pink", "bg": "#000000", "fg": "#f6e9ef", "text_bg": "#050204", "text_fg": "#f6e9ef",
+        "entry_bg": "#12060c", "entry_fg": "#ffffff", "btn_bg": "#fa024c", "btn_fg": "#000000",
+        "btn_active_bg": "#ff3d75", "frame_bg": "#0b0408", "highlight": "#fa024c", "select_bg": "#9b31e9",
+        "select_fg": "#ffffff", "border": "#4a0b24", "muted": "#a8879a", "accent": "#fa024c",
+        "group_title": "#fa024c", "vocals": "#fa024c", "wave": "#9b31e9", "clock_bg": "#000000",
+        "clock_fg": "#02fd6f", "playhead": "#02fd6f", "check_border": "#fa024c", "toggle_on": "#02fd6f",
+    },
 }
 THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "Light"), ("dark", "Dark"),
                  ("lyridan_dark", "Lyridan Dark (black & yellow, from v1.1.1)"),
@@ -116,7 +126,8 @@ THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "
                  ("digital_studio", "Digital Studio (dark: DAW edit window look)"),
                  ("digital_studio_light", "Digital Studio Light (light: classic DAW edit window)"),
                  ("studio_console", "Studio Console (dark: charcoal console strip)"),
-                 ("studio_console_light", "Studio Console Light (light: silver-blue console strip)")]
+                 ("studio_console_light", "Studio Console Light (light: silver-blue console strip)"),
+                 ("cyber_pink", "Cyber Pink (dark: black, magenta-pink & green)")]
 
 _BASE_KEYS = ("name", "bg", "fg", "text_bg", "text_fg", "entry_bg", "entry_fg", "btn_bg", "btn_fg", "btn_active_bg",
               "frame_bg", "highlight", "select_bg", "select_fg", "border", "muted", "accent")

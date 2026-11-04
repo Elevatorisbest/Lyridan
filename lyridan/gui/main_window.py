@@ -191,7 +191,11 @@ class MainWindow(QMainWindow):
             i = buildinfo.info()
             tag = QLabel(f" DEV {buildinfo.dev_build_label(i)} · {i.get('branch', '')} @ {i.get('commit_short', '')} ")
             tag.setStyleSheet("background:#f5a524; color:black; font-weight:bold; border-radius:3px;")
-            tag.setToolTip(buildinfo.as_text())
+            tag.setToolTip(buildinfo.as_text() + "\n\nClick for the build details (Options → About this build)")
+            tag.setCursor(Qt.PointingHandCursor)
+            tag.mousePressEvent = lambda ev: (self.open_options("build") if ev.button() == Qt.LeftButton
+                                              else None)
+            self.dev_tag = tag
             self.statusBar().addPermanentWidget(tag)
         self.apply_options()
         from .update_ui import UpdateController
@@ -1402,10 +1406,11 @@ class MainWindow(QMainWindow):
         super().closeEvent(ev)
 
     # ------------------------------------------------------------------ options / theme / session
-    def open_options(self):
+    def open_options(self, page: str = ""):
+        """Edit → Options. ``page``: open on that tab ("build" = About this build)."""
         from .options_dialog import OptionsDialog
         self._read_settings_from_ui()
-        OptionsDialog(self.settings, self).exec()
+        OptionsDialog(self.settings, self, page=page if isinstance(page, str) else "").exec()
 
     SESSION_BASE_WIDTH = 300                   # session cluster width in the default 1380 px window
 
@@ -1472,6 +1477,7 @@ class MainWindow(QMainWindow):
         self.timeline.btn_metro.setChecked(self.settings.metronome)
         self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
         self.timeline.set_navigation(self.settings.timeline_arrow_step, self.settings.timeline_accelerate)
+        self.timeline.set_shuttle_speeds(self.settings.shuttle_ff_speed, self.settings.shuttle_rew_speed)
         self.timeline._show_focus(self.timeline.view.canvas.hasFocus())
         if reset_ack:
             self._disclaimer_seen_this_session = False

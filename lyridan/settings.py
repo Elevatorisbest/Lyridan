@@ -73,7 +73,9 @@ class Settings:
     metronome: bool = False
     follow_playhead: bool = True
     timeline_arrow_step: str = "beat"      # 0.1s | quarter | half | beat | bar | 1s
-    timeline_accelerate: bool = True       # arrow keys speed up while held
+    timeline_accelerate: bool = True       # the ← / → shuttle speeds up the longer it is held
+    shuttle_ff_speed: float = 4.0          # holding → in the timeline: fast forward at this × real time
+    shuttle_rew_speed: float = 4.0         # holding ←: rewind at this × real time
     timeline_click_focus: bool = True      # unused since 2.0.2 (the timeline always has the keys); kept for old files
     export_folder: str = ""                # "" = next to the beatmap / lyrics
     last_session: Dict[str, str] = field(default_factory=dict)

@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import deque
 from typing import List, Optional, Sequence
 
 import numpy as np
@@ -54,32 +55,49 @@ def _click(sr: int, freq: float, ms: float = 28.0) -> np.ndarray:
 
 
 class AudioPlayer:
+    """Plays the song through PortAudio. ``position()`` is the sample coming out of the speakers.
+
+    Every audio block that is written is remembered with its DAC time and rate, so the position
+    stays exact through seeks and speed changes (shuttle fast-forward / rewind): it is computed
+    from the newest block that is already audible. Until the first block after a seek is audible,
+    the playhead waits at the seek target instead of jumping back by the output latency.
+    A negative ``speed`` plays backwards (rewind shuttle).
+    """
+    HISTORY = 128                           # remembered blocks (a few hundred ms at any latency)
+
     def __init__(self):
         self.data: Optional[np.ndarray] = None
         self.sr = 44100
         self.path = ""
         self.peaks = np.zeros((0, 2), dtype=np.float32)
         self.volume = 0.8
-        self.speed = 1.0
+        self._speed = 1.0
         self.metronome = False
         self.clicks: List[tuple] = []      # (frame, accent)
         self._lock = threading.Lock()
         self._pos = 0.0                     # frame position of the next block to write
-        self._ref = (0.0, 0.0)              # (frame at dac time, dac time) for interpolation
+        self._blocks = deque(maxlen=self.HISTORY)  # (frame, dac time, rate) of written blocks
+        self._anchor = 0.0                  # frame shown until a block is audible (play / seek)
         self._playing = False
         self._stream = None
         self._sd = None
-        self._clock_start = None            # silent fallback clock
-        # seeking while playing: the device still holds a few ms of audio from before the seek,
-        # so the playhead waits at the target until the new audio reaches the speakers
-        # (instead of jumping back by the output latency and stuttering on every key press)
-        self._hold: Optional[float] = None  # target frame of the last seek while playing
-        self._hold_dac: Optional[float] = None  # DAC time the first post-seek block is heard
-        self._xfade_from: Optional[float] = None  # old position to cross-fade from (no click)
-        self._last_pos = 0.0                # position() never runs backwards while playing
+        self._clock_start = None            # silent fallback clock: (perf_counter, frame)
+        self._xfade_from: Optional[float] = None  # old position to cross-fade from at a seek (no click)
+        self._last_pos = 0.0                # position() never runs against the playing direction
         self.device_error = ""
         self._click_hi = _click(self.sr, 1600)
         self._click_lo = _click(self.sr, 1000)
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: float):
+        value = float(value)
+        if self._clock_start is not None:   # silent clock: rebase so the change applies from now on
+            self._clock_start = (time.perf_counter(), self.position() * self.sr)
+        self._speed = value
 
     # ------------------------------------------------------------------ loading
     def load(self, path: str):
@@ -88,7 +106,8 @@ class AudioPlayer:
         with self._lock:
             self.data, self.sr, self.path = data, sr, path
             self._pos = 0.0
-            self._ref = (0.0, 0.0)
+            self._blocks.clear()
+            self._anchor = 0.0
         self.peaks = waveform_peaks(data, sr)
         self._click_hi = _click(sr, 1600)
         self._click_lo = _click(sr, 1000)
@@ -100,7 +119,8 @@ class AudioPlayer:
         with self._lock:
             self.data, self.path = None, ""
             self._pos = 0.0
-            self._ref = (0.0, 0.0)
+            self._blocks.clear()
+            self._anchor = 0.0
         self.peaks = np.zeros((0, 2), dtype=np.float32)
 
     @property
@@ -150,8 +170,9 @@ class AudioPlayer:
         self._last_pos = self._pos / self.sr
         if self._ensure_stream():
             with self._lock:
-                self._ref = (self._pos, None)
-                self._hold = self._hold_dac = self._xfade_from = None
+                self._blocks.clear()
+                self._anchor = self._pos
+                self._xfade_from = None
             try:
                 self._stream.start()
                 return
@@ -172,8 +193,9 @@ class AudioPlayer:
                 pass
         self._clock_start = None
         with self._lock:
-            self._ref = (self._pos, None)
-            self._hold = self._hold_dac = self._xfade_from = None
+            self._blocks.clear()
+            self._anchor = self._pos
+            self._xfade_from = None
 
     def stop(self):
         self.pause()
@@ -184,7 +206,7 @@ class AudioPlayer:
 
     @property
     def playing(self) -> bool:
-        if self._playing and self.data is not None and self.position() >= self.duration:
+        if self._playing and self.data is not None and self._speed > 0 and self.position() >= self.duration:
             self.pause()
             self._pos = len(self.data)
         return self._playing
@@ -195,12 +217,11 @@ class AudioPlayer:
         frame = float(min(max(0.0, seconds), self.duration) * self.sr)
         live = self._playing and self._stream is not None and self._clock_start is None
         with self._lock:
-            if live:
-                if self._xfade_from is None:
-                    self._xfade_from = self._pos     # what the next block would have played
-                self._hold, self._hold_dac = frame, None
+            if live and self._xfade_from is None:
+                self._xfade_from = self._pos         # what the next block would have played
             self._pos = frame
-            self._ref = (frame, None)
+            self._blocks.clear()                     # nothing written so far is the new position
+            self._anchor = frame
         self._last_pos = frame / self.sr
         if self._clock_start is not None:
             self._clock_start = (time.perf_counter(), frame)
@@ -213,26 +234,30 @@ class AudioPlayer:
             return self._pos / self.sr
         if self._clock_start is not None:  # silent fallback
             t0, f0 = self._clock_start
-            return min(self.duration, (f0 + (time.perf_counter() - t0) * self.sr * self.speed) / self.sr)
-        with self._lock:
-            frame, dac = self._ref
-            hold, hold_dac = self._hold, self._hold_dac
-        if dac is None or self._stream is None:
-            return frame / self.sr
+            return max(0.0, min(self.duration, (f0 + (time.perf_counter() - t0) * self.sr * self._speed) / self.sr))
+        if self._stream is None:
+            return self._pos / self.sr
         try:
             now = self._stream.time
         except Exception:  # noqa: BLE001
-            return frame / self.sr
-        if hold is not None:
-            if hold_dac is None or now < hold_dac:
-                return hold / self.sr                # the seek target is not audible yet
-            with self._lock:
-                if self._hold == hold:
-                    self._hold = self._hold_dac = None
-            self._last_pos = hold / self.sr
-        pos = max(0.0, min(self.duration, (frame + (now - dac) * self.sr * self.speed) / self.sr))
-        if pos < self._last_pos and self._last_pos - pos < 0.25:
-            pos = self._last_pos                     # DAC-timestamp jitter: never step backwards
+            return self._pos / self.sr
+        with self._lock:
+            blocks = list(self._blocks)
+            anchor = self._anchor
+        heard = None
+        for b in reversed(blocks):                   # newest block that is already audible
+            if b[1] <= now:
+                heard = b
+                break
+        if heard is None:
+            return anchor / self.sr                  # the latest play / seek is not audible yet
+        frame, dac, rate = heard
+        pos = max(0.0, min(self.duration, (frame + (now - dac) * self.sr * rate) / self.sr))
+        last = self._last_pos                        # DAC-timestamp jitter: never step back
+        if rate > 0 and last - 0.25 < pos < last:
+            pos = last
+        elif rate < 0 and last < pos < last + 0.25:
+            pos = last
         self._last_pos = pos
         return pos
 
@@ -273,20 +298,21 @@ class AudioPlayer:
         dac = self._dac_time(time_info)
         with self._lock:
             pos = self._pos
-            self._ref = (pos, dac)
-            if self._hold is not None and self._hold_dac is None:
-                self._hold_dac = dac                 # this block starts at the seek target
+            step = self._speed
+            if step < 0 and pos <= 0.0:
+                step = 0.0                           # rewound to the start: wait there (silence)
+            self._blocks.append((pos, dac, step))
             old = self._xfade_from
             self._xfade_from = None
-            step = self.speed
-            self._pos = pos + frames * step
-        out, valid = self._render(data, pos, frames, step)
-        if old is not None:                          # fade the pre-seek audio out, the new audio in
+            self._pos = max(0.0, pos + frames * step)
+        out, valid = self._render(data, pos, frames, step) if step else \
+            (np.zeros((frames, data.shape[1]), dtype=np.float32), None)
+        if old is not None and step:                 # fade the pre-seek audio out, the new audio in
             nx = min(frames, max(1, int(self.sr * self.XFADE_MS / 1000)))
             prev, _ = self._render(data, old, nx, step)
             ramp = np.linspace(0.0, 1.0, nx, dtype=np.float32)[:, None]
             out[:nx] = prev * (1 - ramp) + out[:nx] * ramp
-        if self.metronome and self.clicks:
+        if self.metronome and self.clicks and step > 0:
             a, b = int(pos), int(pos + frames * step)
             for f, accent in self.clicks:
                 if a - 2000 <= f < b:
@@ -299,8 +325,8 @@ class AudioPlayer:
                         out[s0:s0 + (k1 - k0)] += snd[k0:k1, None]
         np.clip(out * self.volume, -1.0, 1.0, out=out)
         outdata[:] = out
-        if not valid.any():
-            raise self._sd.CallbackStop()
+        if step > 0 and not valid.any():
+            raise self._sd.CallbackStop()            # played past the end
 
     def close(self):
         self.pause()

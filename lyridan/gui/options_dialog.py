@@ -4,7 +4,8 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
+                               QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSlider,
                                QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
@@ -14,14 +15,16 @@ from .themes import THEME_CHOICES
 
 
 class OptionsDialog(QDialog):
-    def __init__(self, settings: Settings, parent=None):
+    PAGES = ("appearance", "playback", "general", "updates", "alignment", "build")
+
+    def __init__(self, settings: Settings, parent=None, page: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Options")
         self.setMinimumSize(620, 520)
         self.s = settings
         self.reset_ack = False
         lay = QVBoxLayout(self)
-        tabs = QTabWidget()
+        self.tabs = tabs = QTabWidget()
         lay.addWidget(tabs)
         tabs.addTab(self._appearance(), "Appearance")
         tabs.addTab(self._playback(), "Timeline && playback")
@@ -29,6 +32,8 @@ class OptionsDialog(QDialog):
         tabs.addTab(self._updates(), "Updates")
         tabs.addTab(self._model(), "Audio alignment")
         tabs.addTab(self._build(), "About this build")
+        if page in self.PAGES:
+            tabs.setCurrentIndex(self.PAGES.index(page))
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
         bb.accepted.connect(self._ok)
         bb.rejected.connect(self.reject)
@@ -83,20 +88,40 @@ class OptionsDialog(QDialog):
         for k, label in ARROW_STEPS.items():
             self.arrow_step.addItem(label, k)
         self.arrow_step.setCurrentIndex(max(0, self.arrow_step.findData(self.s.timeline_arrow_step)))
-        self.arrow_step.setToolTip("How far one press of ← / → moves the playhead in the timeline "
+        self.arrow_step.setToolTip("How far one tap of ← / → moves the playhead in the timeline "
                                    "(Shift = 4× as far)")
-        f.addRow("Arrow keys move by", self.arrow_step)
-        self.accel = QCheckBox("Speed up while an arrow key is held")
+        f.addRow("Tapping ← → moves by", self.arrow_step)
+        self.ff_speed = self._speed_box(self.s.shuttle_ff_speed,
+                                        "Holding → (or the ▶▶ button) moves the playhead smoothly forward at this "
+                                        "many times real time. While playing you hear the song sped up.")
+        f.addRow("Fast forward speed (hold →)", self.ff_speed)
+        self.rew_speed = self._speed_box(self.s.shuttle_rew_speed,
+                                         "Holding ← (or the ◀◀ button) moves the playhead smoothly back at this "
+                                         "many times real time. While playing you hear the song backwards.")
+        f.addRow("Rewind speed (hold ←)", self.rew_speed)
+        self.accel = QCheckBox("Speed up the longer ← / → is held (up to 4× after 4 s)")
         self.accel.setChecked(self.s.timeline_accelerate)
         f.addRow(self.accel)
         tip = QLabel("The timeline has the keyboard by default. Only a value field you click into (a number or "
-                     "text box) takes it, until you press Enter / Esc or click elsewhere. ← → step · Shift = faster · Ctrl/Alt + ← → = lines · PgUp/PgDn = "
+                     "text box) takes it, until you press Enter / Esc or click elsewhere. Tap ← → = step · hold "
+                     "← → = smooth rewind / fast forward · Shift = faster · Ctrl/Alt + ← → = lines · PgUp/PgDn = "
                      "sections · ↑ ↓ = zoom · Space = play/pause · Enter = play the line · L = loop · "
                      "Shift + drag = select a range · Ctrl+P = play/pause anywhere.")
         tip.setWordWrap(True)
         tip.setStyleSheet("color: gray;")
         f.addRow(tip)
         return w
+
+    @staticmethod
+    def _speed_box(value: float, tip: str) -> QDoubleSpinBox:
+        box = QDoubleSpinBox()
+        box.setRange(1.0, 32.0)
+        box.setSingleStep(0.5)
+        box.setDecimals(1)
+        box.setSuffix(" ×")
+        box.setValue(float(value))
+        box.setToolTip(tip + " Shift while holding doubles it.")
+        return box
 
     def _general(self):
         w, f = self._form()
@@ -296,6 +321,8 @@ class OptionsDialog(QDialog):
         s.follow_playhead = self.follow.isChecked()
         s.timeline_arrow_step = self.arrow_step.currentData()
         s.timeline_accelerate = self.accel.isChecked()
+        s.shuttle_ff_speed = self.ff_speed.value()
+        s.shuttle_rew_speed = self.rew_speed.value()
         s.restore_session = self.restore.isChecked()
         s.export_folder = self.export_dir.text().strip()
         s.disclaimer_acknowledged = not self.disclaimer.isChecked()

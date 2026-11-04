@@ -582,24 +582,146 @@ def test_timeline_owns_the_keyboard(tmp_path, monkeypatch):
         app.processEvents()
 
 
-def test_held_arrow_keeps_stepping_while_playing():
-    """While playing, the playhead moves on a little between key repeats; held ← must still go
-    back one grid point per repeat instead of snapping to the same point again."""
+def test_arrow_taps_step_and_holds_shuttle_smoothly():
+    """Tap ← / → = one grid step (continuing from the last step's target while playing);
+    hold = smooth shuttle: the playhead glides in small even increments, no jumps."""
     pytest.importorskip("PySide6")
+    import time as _time
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication
-    from lyridan.gui.timeline import TimelineCanvas
+    from lyridan.gui.timeline_panel import TimelinePanel
     from lyridan.parsers.rsxml import Beatmap
     app = QApplication.instance() or QApplication([])  # noqa: F841
-    c = TimelineCanvas()
-    c.duration = 20.0
-    c.beatmap = Beatmap(beats=[k * 0.5 for k in range(40)], measure_flags=[k % 4 == 0 for k in range(40)])
+    panel = TimelinePanel()
+    c = panel.view.canvas
+    c.duration = 60.0
+    c.beatmap = Beatmap(beats=[k * 0.5 for k in range(120)], measure_flags=[k % 4 == 0 for k in range(120)])
     c.arrow_step, c.accelerate = "beat", False
     got = []
     c.navRequested.connect(got.append)
+
+    def tap(key):
+        c.keyPressEvent(QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier))
+        c.keyReleaseEvent(QKeyEvent(QEvent.KeyRelease, key, Qt.NoModifier))
+
     c.playhead = 10.0
     for _ in range(4):
-        c.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Left, Qt.NoModifier, "", True))
-        c.playhead = got[-1] + 0.02                       # playback ran on 20 ms before the next repeat
+        tap(Qt.Key_Left)
+        c.playhead = got[-1] + 0.02                       # playback ran on 20 ms before the next tap
     assert got == [9.5, 9.0, 8.5, 8.0]
+    # hold → : nothing jumps on the press, then a smooth glide at the fast-forward speed
+    panel.set_shuttle_speeds(4.0, 2.0)
+    panel.seek_chart(20.0)
+    got.clear()
+    seen = []
+    panel.view.canvas.navRequested.connect(lambda t: seen.append(("nav", t)))
+    c.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.NoModifier))
+    t_press = _time.perf_counter()
+    path = []
+    while _time.perf_counter() - t_press < 0.8:
+        QTest.qWait(5)
+        path.append(panel.chart_time())
+    c.keyReleaseEvent(QKeyEvent(QEvent.KeyRelease, Qt.Key_Right, Qt.NoModifier))
+    assert not got                                       # a hold is not a step
+    moved = path[-1] - 20.0
+    assert 1.6 < moved < 3.0                             # ~4 × (0.8 s - 0.2 s delay) = 2.4 s
+    steps = [b - a for a, b in zip(path, path[1:])]
+    assert min(steps) >= 0 and max(steps) < 0.25         # glides (16 ms ticks), never a grid jump
+    stop = panel.chart_time()
+    QTest.qWait(60)
+    assert panel.chart_time() == stop                    # released: stops right there
+    # hold ← rewinds at its own speed and stops at 0:00
+    panel.seek_chart(0.5)
+    panel.shuttle_start(-1)
+    QTest.qWait(500)
+    panel.shuttle_stop()
+    assert panel.chart_time() == 0.0
+    panel.shutdown()
+
+
+def test_audio_shuttle_speed_changes_stay_in_sync():
+    """Fast forward / rewind while playing changes the playback rate; the playhead follows what
+    is audible (through the output latency) without jumps, and rewinding stops at 0:00."""
+    import types
+    import numpy as np
+    from lyridan.gui.audio_player import AudioPlayer
+    sr, lat, blk = 44100, 0.09, 512
+
+    class Stream:
+        t, latency = 0.0, lat
+        time = property(lambda self: self.t)
+        start = stop = close = lambda self: None
+
+    p = AudioPlayer()
+    p.sr = sr
+    p.data = np.zeros((sr * 30, 2), np.float32)
+    st = Stream()
+    p._stream, p._sd = st, types.SimpleNamespace(CallbackStop=Exception)
+    p.seek(10.0)
+    p.play()
+    tt, tf, errs, seen = [], [], [], []
+    now, ncb = 0.0, 0.0
+    sched = {1.0: 4.0, 2.0: -4.0, 3.0: 1.0}
+    while now < 4.0:
+        st.t = now
+        for k in [k for k in sched if now >= k]:
+            p.speed = sched.pop(k)
+        if now >= ncb:
+            f0, rate = p._pos, p.speed
+            p._callback(np.zeros((blk, 2), np.float32), blk,
+                        types.SimpleNamespace(currentTime=now, outputBufferDacTime=now + lat), None)
+            for k in range(0, blk, 32):
+                tt.append(now + lat + k / sr)
+                tf.append(f0 + k * rate)
+            ncb += blk / sr
+        if now > lat + 0.01:
+            pos = p.position()
+            errs.append(abs(pos - np.interp(now, tt, tf) / sr))
+            seen.append(pos)
+        now += 0.001
+    assert max(errs) < 0.005
+    assert max(abs(b - a) for a, b in zip(seen, seen[1:])) < 0.01
+    p.seek(0.05)                                         # rewinding past the start waits at 0:00
+    p.speed = -4.0
+    for k in range(40):
+        st.t = 10.0 + k * blk / sr
+        p._callback(np.zeros((blk, 2), np.float32), blk,
+                    types.SimpleNamespace(currentTime=st.t, outputBufferDacTime=st.t + lat), None)
+    assert p.playing and p.position() == 0.0
+
+
+def test_cyber_pink_theme_and_dev_badge(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    for k in ("HOME", "APPDATA", "XDG_CONFIG_HOME"):
+        monkeypatch.setenv(k, str(tmp_path))
+    from lyridan.gui.themes import THEME_CHOICES, THEMES
+    t = THEMES["cyber_pink"]
+    assert t["bg"] == "#000000" and t["accent"] == "#fa024c" and t["clock_fg"] == "#02fd6f"
+    assert "#9b31e9" in t.values() and "cyber_pink" in dict(THEME_CHOICES)
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+    from lyridan import buildinfo
+    from lyridan.gui import options_dialog
+    app = QApplication.instance() or QApplication([])
+    from lyridan.gui.main_window import MainWindow
+    monkeypatch.setattr(buildinfo, "is_dev", lambda: True)
+    opened = []
+    monkeypatch.setattr(options_dialog.OptionsDialog, "exec",
+                        lambda self: opened.append(self.tabs.tabText(self.tabs.currentIndex())))
+    w = MainWindow()
+    try:
+        w.show()
+        QTest.qWait(30)
+        QTest.mouseClick(w.dev_tag, Qt.LeftButton)
+        assert opened == ["About this build"]
+        w.open_options(False)                            # menu / button: opens on the first page
+        assert opened[-1] == "Appearance"
+    finally:
+        w.timeline.shutdown()
+        w.hide()
+        w.deleteLater()
+        app.processEvents()
