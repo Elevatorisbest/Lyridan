@@ -612,7 +612,7 @@ def test_arrow_taps_step_and_holds_shuttle_smoothly():
         c.playhead = got[-1] + 0.02                       # playback ran on 20 ms before the next tap
     assert got == [9.5, 9.0, 8.5, 8.0]
     # hold → : nothing jumps on the press, then a smooth glide at the fast-forward speed
-    panel.set_shuttle_speeds(4.0, 2.0)
+    panel.set_shuttle_speeds(4.0, 2.0, "off")
     panel.seek_chart(20.0)
     got.clear()
     seen = []
@@ -723,5 +723,92 @@ def test_cyber_pink_theme_and_dev_badge(tmp_path, monkeypatch):
     finally:
         w.timeline.shutdown()
         w.hide()
+        w.deleteLater()
+        app.processEvents()
+
+
+def test_shuttle_keeps_the_pitch():
+    """Fast forward / rewind while playing plays short aligned grains at normal speed: a 440 Hz
+    tone stays 440 Hz (resampling would make it 1760 Hz), the volume stays steady, no clicks on the
+    way in or out, and the playhead still moves at the shuttle rate."""
+    import types
+    import numpy as np
+    from lyridan.gui.audio_player import AudioPlayer
+    sr, lat, blk = 44100, 0.05, 512
+
+    class Stream:
+        t, latency = 0.0, lat
+        time = property(lambda self: self.t)
+        start = stop = close = lambda self: None
+
+    for rate in (4.0, -4.0, 16.0):
+        p = AudioPlayer()
+        p.sr = sr
+        tt = np.arange(sr * 150) / sr
+        x = np.sin(2 * np.pi * 440 * tt)
+        p.data = np.stack([x, x], 1).astype(np.float32)
+        st = Stream()
+        p._stream, p._sd = st, types.SimpleNamespace(CallbackStop=Exception)
+        p.seek(75.0)
+        p.play()
+        out, now, marks = [], 0.0, {}
+        for i in range(int(3 * sr / blk)):
+            st.t = now
+            if i == int(0.5 * sr / blk):
+                p.set_shuttle(rate)
+            if i == int(2.5 * sr / blk):
+                p.set_shuttle(None)
+            if i in (int(1.0 * sr / blk), int(2.0 * sr / blk)):
+                marks[i] = (now, p.position())
+            b = np.zeros((blk, 2), np.float32)
+            p._callback(b, blk, types.SimpleNamespace(currentTime=now, outputBufferDacTime=now + lat), None)
+            out.append(b[:, 0].copy())
+            now += blk / sr
+        y = np.concatenate(out)
+        mid = y[int(1.0 * sr):int(2.4 * sr)]
+        peak = np.fft.rfftfreq(len(mid), 1 / sr)[np.argmax(np.abs(np.fft.rfft(mid * np.hanning(len(mid)))))]
+        assert abs(peak - 440) < 3, (rate, peak)
+        rms = [np.sqrt(np.mean(mid[i:i + 441] ** 2)) for i in range(0, len(mid) - 441, 441)]
+        assert min(rms) / max(rms) > 0.9, rate
+        assert np.abs(np.diff(y)).max() < 0.07, rate          # sine slope is 0.063: no clicks
+        (t1, p1), (t2, p2) = marks.values()
+        assert abs((p2 - p1) / (t2 - t1) - rate) < 0.1, rate
+
+
+def test_shuttle_speed_up_options():
+    pytest.importorskip("PySide6")
+    from lyridan.gui.timeline_panel import TimelinePanel
+    f = TimelinePanel.speed_up_factor
+    assert f("off", 4, 3, 10) == 1.0
+    assert f("linear", 4, 3, 0) == 1.0 and f("linear", 4, 3, 1.5) == 2.5 and f("linear", 4, 3, 9) == 4.0
+    assert f("exponential", 4, 3, 0) == 1.0 and abs(f("exponential", 4, 3, 1.5) - 2.0) < 1e-9
+    assert f("exponential", 4, 3, 3) == 4.0
+    assert f("exponential", 4, 3, 1.0) < f("linear", 4, 3, 1.0)   # slower at first ...
+    s = Settings.from_json({"timeline_accelerate": False})           # old "speed up" switched off
+    assert s.shuttle_accel == "off"
+    assert Settings.from_json({}).shuttle_accel == "linear"
+
+
+def test_info_banner_follows_the_theme(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    for k in ("HOME", "APPDATA", "XDG_CONFIG_HOME"):
+        monkeypatch.setenv(k, str(tmp_path))
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from lyridan.gui.main_window import MainWindow
+    from lyridan.gui.themes import THEMES
+    w = MainWindow()
+    try:
+        sheets = {}
+        for name in ("light", "dark", "cyber_pink"):
+            w.settings.theme = name
+            w.apply_options()
+            sheets[name] = w.lrc_banner.styleSheet()
+        assert "#e6f0fb" not in "".join(sheets.values())              # no fixed light-blue box
+        assert len(set(sheets.values())) == 3
+        assert THEMES["cyber_pink"]["info"] == "#0063e2" and "#0063e2" in sheets["cyber_pink"]
+    finally:
+        w.timeline.shutdown()
         w.deleteLater()
         app.processEvents()

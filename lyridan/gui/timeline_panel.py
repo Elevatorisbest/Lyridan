@@ -552,24 +552,40 @@ class TimelinePanel(QWidget):
             self._timer.start()
 
     # ------------------------------------------------------------------ shuttle
-    MAX_SHUTTLE = 64.0
+    MAX_SHUTTLE = 256.0
+    accel_mode = "linear"                   # off | linear | exponential
+    accel_max = 4.0                         # top speed = starting speed × this
+    accel_time = 3.0                        # seconds of holding to reach the top speed
 
-    def set_shuttle_speeds(self, ff: float, rew: float):
+    def set_shuttle_speeds(self, ff: float, rew: float, accel: str = "linear", accel_max: float = 4.0,
+                           accel_time: float = 3.0):
         self.ff_speed = max(1.0, float(ff))
         self.rew_speed = max(1.0, float(rew))
+        self.accel_mode = accel if accel in ("off", "linear", "exponential") else "linear"
+        self.accel_max = max(1.0, float(accel_max))
+        self.accel_time = max(0.1, float(accel_time))
+
+    @staticmethod
+    def speed_up_factor(mode: str, top: float, ramp: float, held: float) -> float:
+        """How much faster than the starting speed after ``held`` seconds of holding.
+        linear: grows by the same amount every second; exponential: multiplies by the same
+        amount every second (gentle at first, quick at the end). Both reach ``top`` at ``ramp`` s."""
+        if mode == "off" or top <= 1.0:
+            return 1.0
+        x = min(1.0, max(0.0, held / ramp))
+        return 1.0 + (top - 1.0) * x if mode == "linear" else top ** x
 
     def shuttle_rate(self) -> float:
-        """Signed shuttle rate (× real time) right now: the speed set in Options, twice that with
-        Shift, and (with "speed up while held") rising smoothly to 4× that after 4 s."""
+        """Signed shuttle rate (× real time) right now: the fast forward / rewind speed from Options,
+        times the speed-up for how long it has been held, times 2 with Shift."""
         from PySide6.QtWidgets import QApplication
         if not self._shuttle:
             return 0.0
         rate = self.ff_speed if self._shuttle > 0 else self.rew_speed
         if QApplication.keyboardModifiers() & Qt.ShiftModifier:
             rate *= 2
-        if self.view.canvas.accelerate:
-            held = time.perf_counter() - self._shuttle_t0
-            rate *= 1.0 + min(3.0, max(0.0, held - 1.0))     # 1× for 1 s, then up to 4× at 4 s
+        held = time.perf_counter() - self._shuttle_t0
+        rate *= self.speed_up_factor(self.accel_mode, self.accel_max, self.accel_time, held)
         return self._shuttle * min(self.MAX_SHUTTLE, rate)
 
     def shuttle_start(self, direction: int):
@@ -583,7 +599,7 @@ class TimelinePanel(QWidget):
         self._play_until = None
         self._shuttle_audio = self.player.loaded and self.player.playing
         if self._shuttle_audio:
-            self.player.speed = self.shuttle_rate()      # hear it: sped up, or backwards for rewind
+            self.player.set_shuttle(self.shuttle_rate())  # hear it, at normal pitch
         self._shuttle_timer.start()
 
     def shuttle_stop(self):
@@ -592,7 +608,7 @@ class TimelinePanel(QWidget):
         self._shuttle = 0
         self._shuttle_timer.stop()
         if self._shuttle_audio:
-            self.player.speed = self.speed.currentData() or 1.0
+            self.player.set_shuttle(None)
         self._shuttle_audio = False
         self._prev_t = self.chart_time()
         self._tick()
@@ -602,11 +618,11 @@ class TimelinePanel(QWidget):
         dt, self._shuttle_last = now - self._shuttle_last, now
         rate = self.shuttle_rate()
         if self._shuttle_audio and self.player.playing:
-            self.player.speed = rate                     # the playback tick moves the playhead
+            self.player.set_shuttle(rate)                # the playback tick moves the playhead
             return
         if self._shuttle_audio:                          # playback stopped (end of the song)
             self._shuttle_audio = False
-            self.player.speed = self.speed.currentData() or 1.0
+            self.player.set_shuttle(None)
         end = self.player.duration + self.shift() if self.player.loaded else self.view.canvas.duration
         t = min(max(0.0, self._shuttle_pos + rate * dt), max(0.0, end))
         self._shuttle_pos = t

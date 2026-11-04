@@ -160,10 +160,15 @@ The timeline always has the keyboard, so the keys below work straight away, play
 
 **Tap ← / →** to step the playhead one grid step. **Hold ← / →** to fast forward or rewind smoothly, like a tape shuttle:
 
-- After a fifth of a second the playhead glides continuously at the **fast forward / rewind speed** you set in Options (default 4× real time). The view scrolls along with it.
-- While playing you hear it: sped up when fast forwarding, backwards when rewinding. Normal playback carries on when you let go.
+- After a fifth of a second the playhead glides continuously at the **fast forward / rewind speed** you set in Options (default 4× normal speed). The view scrolls along with it.
+- While playing you hear it at **normal pitch**, like a CD player's search: short snippets of the song, played forwards even while rewinding. Normal playback carries on when you let go.
 - While paused it glides silently.
-- **Shift** doubles the speed. With **Speed up the longer ← / → is held** (on by default) it rises to 4× that after 4 seconds.
+- It can **speed up the longer you hold** (Options → Timeline & playback → *Speed up while held*):
+  - *evenly*: the same amount faster every second;
+  - *slowly at first, then faster and faster*: good for searching nearby, then racing ahead.
+
+  You also choose the **top speed** (default 4× the starting speed) and how many **seconds of holding** it takes to get there (default 3 s). The Options page shows an example of what your settings do.
+- **Shift** doubles the speed.
 - The **◀◀ / ▶▶** buttons do the same: a click jumps to the previous / next line, press and hold to rewind / fast forward.
 - Jumps (taps, clicks, loops) cross-fade the audio instead of clicking, and the playhead never jumps back.
 
@@ -290,7 +295,7 @@ Contractions, possessives, elongated words (*ooooh*) and hyphenated words are ha
 Open them with the **⚙ Options** button at the right end of the toolbar (or Edit → Options):
 
 - **Themes and text sizes**
-- **Playback defaults**, the **arrow-key step** and the **fast forward / rewind speeds** (Timeline & playback)
+- **Playback defaults**, the **arrow-key step**, and **fast forward / rewind**: starting speeds, whether and how they speed up while held, the top speed and how long it takes to reach (Timeline & playback)
 - **Reopening the last session** and the **default export folder**
 - **Notices:** the export disclaimer and resetting dismissed notices
 - **Alignment model management** and **About this build** (in dev builds, clicking the orange **DEV** badge at the bottom right opens it too)
@@ -308,7 +313,7 @@ Open them with the **⚙ Options** button at the right end of the toolbar (or Ed
 | Digital Studio Light | light version of Digital Studio, inspired by a classic DAW edit window |
 | Studio Console | dark, inspired by an analogue mixing console strip |
 | Studio Console Light | light, inspired by a different analogue console strip |
-| Cyber Pink | dark, full black with magenta-pink, neon green and a touch of purple |
+| Cyber Pink | dark, full black with magenta-pink, neon green and touches of purple and blue |
 
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>

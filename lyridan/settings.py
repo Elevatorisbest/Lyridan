@@ -73,9 +73,12 @@ class Settings:
     metronome: bool = False
     follow_playhead: bool = True
     timeline_arrow_step: str = "beat"      # 0.1s | quarter | half | beat | bar | 1s
-    timeline_accelerate: bool = True       # the ← / → shuttle speeds up the longer it is held
+    timeline_accelerate: bool = True       # unused since 2.0.2 dev.3 (see shuttle_accel); read from old files
     shuttle_ff_speed: float = 4.0          # holding → in the timeline: fast forward at this × real time
     shuttle_rew_speed: float = 4.0         # holding ←: rewind at this × real time
+    shuttle_accel: str = "linear"          # speed up while held: off | linear | exponential
+    shuttle_accel_max: float = 4.0         # ... up to this × the starting speed
+    shuttle_accel_time: float = 3.0        # ... reached after this many seconds of holding
     timeline_click_focus: bool = True      # unused since 2.0.2 (the timeline always has the keys); kept for old files
     export_folder: str = ""                # "" = next to the beatmap / lyrics
     last_session: Dict[str, str] = field(default_factory=dict)
@@ -103,6 +106,8 @@ class Settings:
                 s.ja = JapaneseOptions(**{a: b for a, b in v.items() if a in jn})
             elif k in names:
                 setattr(s, k, v)
+        if "shuttle_accel" not in (data or {}) and (data or {}).get("timeline_accelerate") is False:
+            s.shuttle_accel = "off"             # "speed up while held" was switched off before 2.0.2 dev.3
         if int((data or {}).get("update_prefs_rev", 0) or 0) < 1:
             # settings saved by dev.29-31 hold the old default (auto-install on) without anyone choosing it
             s.update_auto_install = False

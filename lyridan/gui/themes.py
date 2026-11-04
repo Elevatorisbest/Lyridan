@@ -4,7 +4,8 @@ System, Light, Dark, the original Lyridan Dark (black & yellow) and the themed
 palettes below. Every theme gets clearly drawn check boxes (a tick on the accent colour
 when on, an empty outlined box when off), generated as small PNGs at runtime.
 Optional keys per theme: ``wave`` (timeline waveform), ``clock_bg`` / ``clock_fg``
-(the transport time display), ``group_title`` (settings group headings).
+(the transport time display), ``group_title`` (settings group headings), ``info`` (the info
+box, default: accent), ``hover`` (tool buttons under the mouse, default: select_bg).
 """
 from __future__ import annotations
 
@@ -107,15 +108,16 @@ THEMES = {
         "accent": "#1f8a8f", "group_title": "#1c6a70", "vocals": "#2d62b4", "wave": "#2d5fb0",
         "clock_bg": "#0b1430", "clock_fg": "#5bb8ff", "playhead": "#d8392f",
     },
-    # full black with hot magenta-pink accents, neon green counters / toggles / playhead and a touch
-    # of purple (selections, waveform)
+    # full black with hot magenta-pink accents, neon green counters / toggles / playhead, a touch
+    # of purple (selections, waveform) and of blue (info box, highlight, button hover)
     "cyber_pink": {
         "name": "Cyber Pink", "bg": "#000000", "fg": "#f6e9ef", "text_bg": "#050204", "text_fg": "#f6e9ef",
         "entry_bg": "#12060c", "entry_fg": "#ffffff", "btn_bg": "#fa024c", "btn_fg": "#000000",
-        "btn_active_bg": "#ff3d75", "frame_bg": "#0b0408", "highlight": "#fa024c", "select_bg": "#9b31e9",
+        "btn_active_bg": "#ff3d75", "frame_bg": "#0b0408", "highlight": "#0063e2", "select_bg": "#9b31e9",
         "select_fg": "#ffffff", "border": "#4a0b24", "muted": "#a8879a", "accent": "#fa024c",
         "group_title": "#fa024c", "vocals": "#fa024c", "wave": "#9b31e9", "clock_bg": "#000000",
         "clock_fg": "#02fd6f", "playhead": "#02fd6f", "check_border": "#fa024c", "toggle_on": "#02fd6f",
+        "info": "#0063e2", "hover": "#0063e2",
     },
 }
 THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "Light"), ("dark", "Dark"),
@@ -252,7 +254,7 @@ QPushButton:disabled {{ background: {c['frame_bg']}; color: {c['muted']}; border
 QPushButton:default {{ font-weight: bold; }}
 QToolButton {{ background: {c['frame_bg']}; color: {c['fg']}; border: 1px solid {c['border']};
     border-radius: 4px; padding: 3px 7px; }}
-QToolButton:hover {{ background: {c['select_bg']}; }}
+QToolButton:hover {{ background: {c.get('hover', c['select_bg'])}; }}
 QToolButton:checked {{ background: {on_bg}; color: {_contrast(on_bg)}; border-color: {on_bg}; font-weight: bold; }}
 QTableWidget, QListWidget, QTreeView {{ background: {c['text_bg']}; color: {c['text_fg']};
     gridline-color: {c['border'] if theme != 'lyridan_dark' else '#333333'}; border: 1px solid {c['border']};
