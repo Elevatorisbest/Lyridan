@@ -75,6 +75,7 @@ Apple's own syllable splits are kept: if the TTML splits a word (`para` + `dise`
 - Punctuation is cleaned up.
 - Characters are ASCII-safe for the stock font.
 - Backticks (`` ` ``) become apostrophes (`'`), so Editor on Fire can import the vocals XML without crashing (Options → General, on by default).
+- Overlap check: no two vocals in an exported XML overlap or touch, since overlapping lyrics can crash Editor on Fire. Each vocal ends at least 2 ms before the next one starts, has a length, and starts at 0:00 or later. If a vocal had to be moved or shortened by more than a rounding step, the export says so.
 
 ### Phrase-aware line breaks
 Lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:
@@ -150,14 +151,18 @@ The **Start / End / Length** clocks show the lyric line under the playhead, or a
 - Jumping past the end of the loop with the keyboard or mouse isn't pulled back, so you can still move around freely.
 
 ### Keyboard
-The timeline keys work while the timeline has the keyboard. A coloured frame and a **Keys active** label show it is listening. To give it the keyboard, click:
+The timeline always has the keyboard, so the keys below work straight away, playing or paused. A **⌨ Keys: timeline** label shows it.
 
-- the timeline itself;
-- the lyrics preview or the overview strip;
-- the transport and zoom buttons;
-- the MAIN or SUB counter, or the Start / End / Length clocks.
+- Buttons, check boxes, drop-downs, tabs and the lyrics table never take the keyboard, so Space or an arrow key can't toggle or change a setting by accident.
+- Click into a value field (a number box, a text box, or a lyrics cell you double-click) to type in it. The arrow keys then change that value.
+- Press **Enter** or **Esc**, or click anywhere else, and the keyboard goes back to the timeline.
+- **Tab** never moves the keyboard into the settings. The ⌨ button lists the keys.
 
-Everything except the timeline itself can be switched off in Options. This works the same while playing or paused. **Esc** hands the keyboard back, and **Tab** never moves it into the settings, so these keys can't change anything outside the timeline. The ⌨ button lists them too.
+Fast-forwarding and rewinding while the song plays is smooth:
+
+- Holding ← or → steps evenly, one grid step per key repeat.
+- The playhead never jumps back.
+- The audio cross-fades at each jump instead of clicking.
 
 | Key | Action |
 |---|---|

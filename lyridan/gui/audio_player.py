@@ -70,6 +70,13 @@ class AudioPlayer:
         self._stream = None
         self._sd = None
         self._clock_start = None            # silent fallback clock
+        # seeking while playing: the device still holds a few ms of audio from before the seek,
+        # so the playhead waits at the target until the new audio reaches the speakers
+        # (instead of jumping back by the output latency and stuttering on every key press)
+        self._hold: Optional[float] = None  # target frame of the last seek while playing
+        self._hold_dac: Optional[float] = None  # DAC time the first post-seek block is heard
+        self._xfade_from: Optional[float] = None  # old position to cross-fade from (no click)
+        self._last_pos = 0.0                # position() never runs backwards while playing
         self.device_error = ""
         self._click_hi = _click(self.sr, 1600)
         self._click_lo = _click(self.sr, 1000)
@@ -140,9 +147,11 @@ class AudioPlayer:
         if self._pos >= len(self.data) - 1:
             self._pos = 0.0
         self._playing = True
+        self._last_pos = self._pos / self.sr
         if self._ensure_stream():
             with self._lock:
                 self._ref = (self._pos, None)
+                self._hold = self._hold_dac = self._xfade_from = None
             try:
                 self._stream.start()
                 return
@@ -164,6 +173,7 @@ class AudioPlayer:
         self._clock_start = None
         with self._lock:
             self._ref = (self._pos, None)
+            self._hold = self._hold_dac = self._xfade_from = None
 
     def stop(self):
         self.pause()
@@ -183,9 +193,15 @@ class AudioPlayer:
         if self.data is None:
             return
         frame = float(min(max(0.0, seconds), self.duration) * self.sr)
+        live = self._playing and self._stream is not None and self._clock_start is None
         with self._lock:
+            if live:
+                if self._xfade_from is None:
+                    self._xfade_from = self._pos     # what the next block would have played
+                self._hold, self._hold_dac = frame, None
             self._pos = frame
             self._ref = (frame, None)
+        self._last_pos = frame / self.sr
         if self._clock_start is not None:
             self._clock_start = (time.perf_counter(), frame)
 
@@ -200,31 +216,76 @@ class AudioPlayer:
             return min(self.duration, (f0 + (time.perf_counter() - t0) * self.sr * self.speed) / self.sr)
         with self._lock:
             frame, dac = self._ref
+            hold, hold_dac = self._hold, self._hold_dac
         if dac is None or self._stream is None:
             return frame / self.sr
         try:
             now = self._stream.time
         except Exception:  # noqa: BLE001
             return frame / self.sr
-        return max(0.0, min(self.duration, (frame + (now - dac) * self.sr * self.speed) / self.sr))
+        if hold is not None:
+            if hold_dac is None or now < hold_dac:
+                return hold / self.sr                # the seek target is not audible yet
+            with self._lock:
+                if self._hold == hold:
+                    self._hold = self._hold_dac = None
+            self._last_pos = hold / self.sr
+        pos = max(0.0, min(self.duration, (frame + (now - dac) * self.sr * self.speed) / self.sr))
+        if pos < self._last_pos and self._last_pos - pos < 0.25:
+            pos = self._last_pos                     # DAC-timestamp jitter: never step backwards
+        self._last_pos = pos
+        return pos
 
     # ------------------------------------------------------------------ audio thread
-    def _callback(self, outdata, frames, time_info, status):  # noqa: ARG002
-        data = self.data
-        with self._lock:
-            pos = self._pos
-            self._ref = (pos, time_info.outputBufferDacTime)
-            step = self.speed
-            idx = pos + np.arange(frames) * step
-            self._pos = pos + frames * step
-        n = len(data)
-        valid = idx < n - 1
+    XFADE_MS = 6.0                          # cross-fade at a seek while playing (avoids a click)
+
+    def _dac_time(self, time_info) -> float:
+        """DAC time of this block. Some host APIs report 0 or nonsense; estimate it then."""
+        dac = getattr(time_info, "outputBufferDacTime", 0.0) or 0.0
+        cur = getattr(time_info, "currentTime", 0.0) or 0.0
+        if cur <= 0.0:
+            try:
+                cur = self._stream.time
+            except Exception:  # noqa: BLE001
+                cur = 0.0
+        if dac <= 0.0 or abs(dac - cur) > 1.0:
+            try:
+                lat = float(self._stream.latency)
+            except Exception:  # noqa: BLE001
+                lat = 0.0
+            dac = cur + lat
+        return dac
+
+    @staticmethod
+    def _render(data: np.ndarray, pos: float, frames: int, step: float):
+        idx = pos + np.arange(frames) * step
+        valid = (idx >= 0) & (idx < len(data) - 1)
         out = np.zeros((frames, data.shape[1]), dtype=np.float32)
         if valid.any():
             i = idx[valid]
             i0 = i.astype(np.int64)
             frac = (i - i0)[:, None].astype(np.float32)
             out[valid] = data[i0] * (1 - frac) + data[i0 + 1] * frac
+        return out, valid
+
+    def _callback(self, outdata, frames, time_info, status):  # noqa: ARG002
+        data = self.data
+        dac = self._dac_time(time_info)
+        with self._lock:
+            pos = self._pos
+            self._ref = (pos, dac)
+            if self._hold is not None and self._hold_dac is None:
+                self._hold_dac = dac                 # this block starts at the seek target
+            old = self._xfade_from
+            self._xfade_from = None
+            step = self.speed
+            self._pos = pos + frames * step
+        out, valid = self._render(data, pos, frames, step)
+        if old is not None:                          # fade the pre-seek audio out, the new audio in
+            nx = min(frames, max(1, int(self.sr * self.XFADE_MS / 1000)))
+            prev, _ = self._render(data, old, nx, step)
+            ramp = np.linspace(0.0, 1.0, nx, dtype=np.float32)[:, None]
+            out[:nx] = prev * (1 - ramp) + out[:nx] * ramp
         if self.metronome and self.clicks:
             a, b = int(pos), int(pos + frames * step)
             for f, accent in self.clicks:

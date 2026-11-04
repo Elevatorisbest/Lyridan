@@ -7,7 +7,8 @@ then for the Lyridan vocals (and the optional reference) a *lines* row with the
 whole Rocksmith line as text and a *syllables* row with one bar per syllable.
 Row names live in a fixed gutter on the left so they never smear while scrolling.
 
-Keyboard (only while the timeline has focus - click it; Esc leaves):
+Keyboard (the timeline has the keyboard by default; a value field you click into borrows it
+until you press Enter / Esc or click elsewhere - see keyboard_focus.py):
   ← →           move the playhead (step set in Options; speeds up while held)
   Shift + ← →   4× bigger steps          Ctrl/Alt + ← →  previous / next lyric line
   PgUp / PgDn   previous / next section  Home / End      start / end of the song
@@ -125,7 +126,7 @@ class TimelineCanvas(QWidget):
     playLineRequested = Signal(float)      # play from here
     zoomKeyRequested = Signal(float)       # zoom factor around the playhead
     fitRequested = Signal()
-    leaveRequested = Signal()              # Esc: give the keyboard back to the rest of the window
+    leaveRequested = Signal()              # Esc (no longer moves the keyboard away since 2.0.2)
     focusChanged = Signal(bool)
     rangeSelected = Signal(float, float)   # Shift + drag: a play / loop range (chart seconds)
     rangeCleared = Signal()                # Shift + click without dragging
@@ -841,13 +842,28 @@ class TimelineCanvas(QWidget):
         k = max(0, min(len(pts) - 1, k))
         return max(0.0, pts[k])
 
+    _nav_anchor: Optional[float] = None    # target of the last arrow / line step
+
+    def _nav_from(self) -> float:
+        """Where a step starts. While playing, the playhead has moved on a little since the last
+        step; stepping from that point would make held ← stall on the same grid point and held →
+        uneven, so a step that follows the last one closely continues from its target."""
+        t = self.playhead or 0.0
+        a = self._nav_anchor
+        if a is not None and a - 0.002 <= t <= a + 0.4:
+            return a
+        return t
+
     def keyPressEvent(self, ev):
         key, mods = ev.key(), ev.modifiers()
         t = self.playhead or 0.0
         if key in (Qt.Key_Left, Qt.Key_Right):
+            t = self._nav_from()
+        if key in (Qt.Key_Left, Qt.Key_Right):
             sign = -1 if key == Qt.Key_Left else 1
             if mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier):
-                self.navRequested.emit(self._line_target(t, sign))
+                self._nav_anchor = self._line_target(t, sign)
+                self.navRequested.emit(self._nav_anchor)
             else:
                 self._held = self._held + 1 if ev.isAutoRepeat() else 0
                 mult = 1
@@ -855,7 +871,8 @@ class TimelineCanvas(QWidget):
                     mult = 1 if self._held < 8 else 2 if self._held < 20 else 4 if self._held < 40 else 8
                 if mods & Qt.ShiftModifier:
                     mult *= 4
-                self.navRequested.emit(self._step(t, sign * mult))
+                self._nav_anchor = self._step(t, sign * mult)
+                self.navRequested.emit(self._nav_anchor)
         elif key in (Qt.Key_PageUp, Qt.Key_PageDown):
             self.navRequested.emit(self._section_target(t, -1 if key == Qt.Key_PageUp else 1))
         elif key == Qt.Key_Home:
@@ -1215,8 +1232,9 @@ class OverviewBar(QWidget):
 
 
 SHORTCUTS_HTML = """
-<b>Timeline keyboard</b> (click the timeline first - a coloured frame shows it is listening;
-<b>Esc</b> hands the keyboard back, so these keys never touch your settings):
+<b>Timeline keyboard</b> (always on: these keys drive the timeline unless you are typing in a
+value field - Enter, Esc or a click elsewhere gives them back; buttons, check boxes and
+drop-downs never take them, so they can't change your settings by accident):
 <table cellspacing=4>
 <tr><td><b>← →</b></td><td>move the playhead (step set in Options; speeds up while held)</td></tr>
 <tr><td><b>Shift + ← →</b></td><td>4× bigger steps</td></tr>

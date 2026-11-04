@@ -238,6 +238,7 @@ class TimelinePanel(QWidget):
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
+        self._timer.setTimerType(Qt.PreciseTimer)   # a coarse 16 ms timer can fire every 15-31 ms (judder)
         self._timer.timeout.connect(self._tick)
         self._last_active = -1
         sc = QShortcut(QKeySequence(Qt.Key_Space), self)
@@ -532,12 +533,15 @@ class TimelinePanel(QWidget):
             self.player.seek(t - self.shift())
         else:
             self._cursor = t
+        self._prev_t = self.chart_time()      # a seek is not playback crossing the loop end
         self._tick()
 
     def navigate(self, t: float):
         """Keyboard navigation: move the playhead and keep it in view."""
         self.seek_chart(max(0.0, t))
-        self.view.ensure_visible_time(self.chart_time(), page=False)
+        # while playing, scroll the same way playback follow does, so the two don't fight
+        # over the view (small scroll vs page flip) on every key repeat
+        self.view.ensure_visible_time(self.chart_time(), page=self.follow and self.player.playing)
 
     def play_from(self, t: float):
         self.seek_chart(max(0.0, t - 0.3))
@@ -579,15 +583,20 @@ class TimelinePanel(QWidget):
         self.view.scroll_to_time(t, 40)
 
     def _show_focus(self, on: bool):
+        from PySide6.QtGui import QFontMetrics
+        f = self.focus_label.font()
+        f.setBold(True)                         # wide enough for both texts: the overview never shifts
+        need = max(QFontMetrics(f).horizontalAdvance(x) for x in ("⌨  Keys: timeline",
+                                                                  "⌨  Typing in a field · Enter or click away"))
+        self.focus_label.setMinimumWidth(max(190, need + 20))
         if on:
             acc = self.view.canvas.accent
             text = "#000000" if acc.lightness() > 140 else "#ffffff"
-            self.focus_label.setText("⌨  Keys active  ·  Esc to leave")
+            self.focus_label.setText("⌨  Keys: timeline")
             self.focus_label.setStyleSheet(f"background: {acc.name()}; color: {text}; font-weight: bold; "
                                            "border-radius: 4px; padding: 3px 8px;")
         else:
-            self.focus_label.setText("Click the timeline, preview or overview to use keys" if self.click_focus
-                                     else "Click the timeline to use keys")
+            self.focus_label.setText("⌨  Typing in a field · Enter or click away")
             self.focus_label.setStyleSheet("padding: 3px 8px;")
 
     def set_navigation(self, arrow_step: str, accelerate: bool):

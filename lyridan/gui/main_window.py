@@ -184,6 +184,8 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._wheel_guard = WheelGuard(self)
         QApplication.instance().installEventFilter(self._wheel_guard)
+        from .keyboard_focus import TimelineKeyboard
+        self.keyboard = TimelineKeyboard(self, self.timeline.view.canvas)   # timeline owns the keys by default
         self._load_settings_into_ui()
         if buildinfo.is_dev():
             i = buildinfo.info()
@@ -322,7 +324,6 @@ class MainWindow(QMainWindow):
         self.timeline = TimelinePanel()
         self.timeline.entryActivated.connect(self._on_entry_activated)
         self.timeline.audioChanged.connect(self._on_audio_changed)
-        self.timeline.leaveRequested.connect(lambda: self.table.setFocus(Qt.OtherFocusReason))
         tl = self.timeline
 
         # ---- toolbar
@@ -1449,6 +1450,13 @@ class MainWindow(QMainWindow):
         super().resizeEvent(ev)
         self._scale_toolbar()
 
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if not getattr(self, "_keys_ready", False):
+            self._keys_ready = True
+            self.keyboard.harden()                  # every widget exists now (incl. the update bar)
+            QTimer.singleShot(0, self.keyboard.give_back)
+
     def apply_options(self, reset_ack: bool = False):
         from .themes import apply_theme, current_colors
         app = QApplication.instance()
@@ -1464,7 +1472,6 @@ class MainWindow(QMainWindow):
         self.timeline.btn_metro.setChecked(self.settings.metronome)
         self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
         self.timeline.set_navigation(self.settings.timeline_arrow_step, self.settings.timeline_accelerate)
-        self.timeline.click_focus = self.settings.timeline_click_focus
         self.timeline._show_focus(self.timeline.view.canvas.hasFocus())
         if reset_ack:
             self._disclaimer_seen_this_session = False

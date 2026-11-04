@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from .model import Line, Word
-from .parsers.rsxml import Beatmap, VocalEntry
+from .parsers.rsxml import Beatmap, VocalEntry, fix_vocal_overlaps
 from .settings import Settings
 
 GRID_VALUES = {"1/4": 4, "1/8": 8, "1/12": 12, "1/16": 16, "1/24": 24, "1/32": 32, "1/64": 64}
@@ -431,6 +431,20 @@ def build_vocals(lines: List[Line], settings: Settings, beatmap: Optional[Beatma
             en = st + max(0.0, min(min_len, room))
         text = rs_clean(ev[2], settings.ascii_only and not native, settings.backtick_to_apostrophe) + ev[3]
         entries.append(VocalEntry(round(st, 3), round(max(0.0, en - st), 3), text, settings.note_value))
+
+    # overlap safety (EOF can crash on overlapping lyrics): whole ms, >= 2 ms between vocals,
+    # nothing before 0:00 or without length. Starts are already increasing, so the order
+    # (and entry_line) stays the same.
+    fix = fix_vocal_overlaps(entries)
+    entries = fix.entries
+    if fix.negative:
+        warnings.append(f"{fix.negative} vocal(s) were before 0:00 and were moved to the start of the song - "
+                        f"check the offset (intro silence / empty bars / manual offset).")
+    if fix.moved - fix.negative > 0 or fix.shortened or fix.lengthened:
+        parts = [f"{n} {what}" for n, what in ((fix.moved - fix.negative, "moved"), (fix.shortened, "shortened"),
+                                               (fix.lengthened, "given a minimal length")) if n > 0]
+        warnings.append("Overlap check: " + ", ".join(parts) + " so no two vocals overlap in the XML "
+                        "(overlapping lyrics can crash Editor on Fire).")
 
     # charting guideline checks
     first = entries[0].time
