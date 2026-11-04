@@ -103,14 +103,14 @@ class OptionsDialog(QDialog):
                                          "How fast holding ← (or ◀◀) moves back through the song when you start.")
         f.addRow("Rewind speed", self.rew_speed)
         self.accel = QComboBox()
-        for key, label in (("off", "No - keep the same speed"),
-                           ("linear", "Yes - speed up evenly"),
-                           ("exponential", "Yes - speed up slowly at first, then faster and faster")):
+        for key, label in (("off", "No"),
+                           ("linear", "Linear"),
+                           ("exponential", "Exponential")):
             self.accel.addItem(label, key)
         self.accel.setCurrentIndex(max(0, self.accel.findData(self.s.shuttle_accel)))
         self.accel.setToolTip("Whether fast forward / rewind gets faster the longer you hold the key.\n"
-                              "Evenly: the same amount faster every second.\n"
-                              "Slowly at first: stays close to the starting speed for a while (good for fine "
+                              "Linear: the same amount faster every second.\n"
+                              "Exponential: stays close to the starting speed for a while (good for fine "
                               "searching), then races to the top speed.")
         f.addRow("Speed up while held", self.accel)
         self.accel_max = self._speed_box(self.s.shuttle_accel_max, 1.5, 16.0, " × the starting speed",
