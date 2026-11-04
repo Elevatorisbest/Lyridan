@@ -129,7 +129,7 @@ THEME_CHOICES = [("system", "System (follow the operating system)"), ("light", "
                  ("digital_studio_light", "Digital Studio Light (light: classic DAW edit window)"),
                  ("studio_console", "Studio Console (dark: charcoal console strip)"),
                  ("studio_console_light", "Studio Console Light (light: silver-blue console strip)"),
-                 ("cyber_pink", "Cyber Pink (dark: black, magenta-pink & green)")]
+                 ("cyber_pink", "Cyber Pink (dark: black, magenta-pink, green, purple and blue)")]
 
 _BASE_KEYS = ("name", "bg", "fg", "text_bg", "text_fg", "entry_bg", "entry_fg", "btn_bg", "btn_fg", "btn_active_bg",
               "frame_bg", "highlight", "select_bg", "select_fg", "border", "muted", "accent")
