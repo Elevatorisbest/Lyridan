@@ -14,7 +14,7 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 > Outside of code, generative AI was used strictly for made up lyrics in the Theme screenshots as well as formatting and information in this readme, which has been checked by the repo author. Elevatorisbest does **not** support or endorse generative AI outside of coding (hence the look of the logo, I made it on my own with my own hands).
 
 ![Lyridan's edit window: lyric preview, timeline with audio, chart notes and vocals, settings and the lyric editor](docs/screenshots/theme_digital_studio.png)
-*The edit window (Digital Studio theme) with a demo song. The demo lyrics are made up, see [Theme screenshots](#options-and-themes).*
+*The edit window (Digital Studio theme) with a demo song. The demo lyrics are made up, see disclaimer in [Theme screenshots](#options-and-themes).*
 
 **Contents:**
 [Quick start](#quick-start) ·
