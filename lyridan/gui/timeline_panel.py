@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import bisect
 import os
+import time
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -182,12 +183,14 @@ class TimelinePanel(QWidget):
         # edit-window readouts (read-only) and line rewind / fast-forward (same as Ctrl/Alt + ← →)
         self.btn_rew = QToolButton()
         self.btn_rew.setText("◀◀")
-        self.btn_rew.setToolTip("Previous lyric line (Ctrl/Alt + ← in the timeline)")
-        self.btn_rew.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), -1)))
+        self.btn_rew.setToolTip("Click: previous lyric line (Ctrl/Alt + ←) · hold: rewind (hold ←)")
+        self.btn_rew.pressed.connect(lambda: self._button_hold(-1))
+        self.btn_rew.released.connect(lambda: self._button_release(-1))
         self.btn_ff = QToolButton()
         self.btn_ff.setText("▶▶")
-        self.btn_ff.setToolTip("Next lyric line (Ctrl/Alt + → in the timeline)")
-        self.btn_ff.clicked.connect(lambda: self.navigate(c._line_target(self.chart_time(), 1)))
+        self.btn_ff.setToolTip("Click: next lyric line (Ctrl/Alt + →) · hold: fast forward (hold →)")
+        self.btn_ff.pressed.connect(lambda: self._button_hold(1))
+        self.btn_ff.released.connect(lambda: self._button_release(1))
         self.btn_loop = QToolButton()
         self.btn_loop.setText("⟲ Loop")
         self.btn_loop.setCheckable(True)
@@ -223,6 +226,8 @@ class TimelinePanel(QWidget):
         c.rangeSelected.connect(self._range_selected)
         c.rangeCleared.connect(self.clear_range)
         c.loopKeyRequested.connect(self.btn_loop.toggle)
+        c.shuttleStarted.connect(self.shuttle_start)
+        c.shuttleStopped.connect(self.shuttle_stop)
         self._beat_bar: List[int] = []          # bar number of every beat
         self._beat_pos: List[int] = []          # beat number inside its bar
 
@@ -238,6 +243,21 @@ class TimelinePanel(QWidget):
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
+        self._timer.setTimerType(Qt.PreciseTimer)   # a coarse 16 ms timer can fire every 15-31 ms (judder)
+        # shuttle: smooth fast forward / rewind while ← / → (or ◀◀ / ▶▶) is held
+        self.ff_speed = 4.0
+        self.rew_speed = 4.0
+        self._shuttle = 0                             # -1 rewind, +1 fast forward, 0 off
+        self._shuttle_audio = False                   # True: the audio itself runs at the shuttle rate
+        self._shuttle_timer = QTimer(self)
+        self._shuttle_timer.setInterval(16)
+        self._shuttle_timer.setTimerType(Qt.PreciseTimer)
+        self._shuttle_timer.timeout.connect(self._shuttle_tick)
+        self._btn_hold = QTimer(self)                 # ◀◀ / ▶▶ held this long: shuttle instead of a line jump
+        self._btn_hold.setSingleShot(True)
+        self._btn_hold.setInterval(250)
+        self._btn_hold.timeout.connect(lambda: self.shuttle_start(self._btn_dir))
+        self._btn_dir = 0
         self._timer.timeout.connect(self._tick)
         self._last_active = -1
         sc = QShortcut(QKeySequence(Qt.Key_Space), self)
@@ -509,6 +529,15 @@ class TimelinePanel(QWidget):
         if not self.player.loaded:
             if not self._try_play_without_audio():
                 return
+        if self._shuttle:                       # Space while shuttling: keep shuttling in the new mode
+            d = self._shuttle
+            self.shuttle_stop()
+            self._toggle_play()
+            self.shuttle_start(d)
+            return
+        self._toggle_play()
+
+    def _toggle_play(self):
         if self.player.playing:
             self.player.pause()
             self._timer.stop()
@@ -522,6 +551,102 @@ class TimelinePanel(QWidget):
             self.btn_play.setText("⏸ Pause")
             self._timer.start()
 
+    # ------------------------------------------------------------------ shuttle
+    MAX_SHUTTLE = 256.0
+    accel_mode = "linear"                   # off | linear | exponential
+    accel_max = 4.0                         # top speed = starting speed × this
+    accel_time = 3.0                        # seconds of holding to reach the top speed
+
+    def set_shuttle_speeds(self, ff: float, rew: float, accel: str = "linear", accel_max: float = 4.0,
+                           accel_time: float = 3.0):
+        self.ff_speed = max(1.0, float(ff))
+        self.rew_speed = max(1.0, float(rew))
+        self.accel_mode = accel if accel in ("off", "linear", "exponential") else "linear"
+        self.accel_max = max(1.0, float(accel_max))
+        self.accel_time = max(0.1, float(accel_time))
+
+    @staticmethod
+    def speed_up_factor(mode: str, top: float, ramp: float, held: float) -> float:
+        """How much faster than the starting speed after ``held`` seconds of holding.
+        linear: grows by the same amount every second; exponential: multiplies by the same
+        amount every second (gentle at first, quick at the end). Both reach ``top`` at ``ramp`` s."""
+        if mode == "off" or top <= 1.0:
+            return 1.0
+        x = min(1.0, max(0.0, held / ramp))
+        return 1.0 + (top - 1.0) * x if mode == "linear" else top ** x
+
+    def shuttle_rate(self) -> float:
+        """Signed shuttle rate (× real time) right now: the fast forward / rewind speed from Options,
+        times the speed-up for how long it has been held, times 2 with Shift."""
+        from PySide6.QtWidgets import QApplication
+        if not self._shuttle:
+            return 0.0
+        rate = self.ff_speed if self._shuttle > 0 else self.rew_speed
+        if QApplication.keyboardModifiers() & Qt.ShiftModifier:
+            rate *= 2
+        held = time.perf_counter() - self._shuttle_t0
+        rate *= self.speed_up_factor(self.accel_mode, self.accel_max, self.accel_time, held)
+        return self._shuttle * min(self.MAX_SHUTTLE, rate)
+
+    def shuttle_start(self, direction: int):
+        if not direction or (not self.player.loaded and self.view.canvas.duration <= 0):
+            return
+        if self._shuttle:
+            self.shuttle_stop()
+        self._shuttle = 1 if direction > 0 else -1
+        self._shuttle_t0 = self._shuttle_last = time.perf_counter()
+        self._shuttle_pos = self.chart_time()
+        self._play_until = None
+        self._shuttle_audio = self.player.loaded and self.player.playing
+        if self._shuttle_audio:
+            self.player.set_shuttle(self.shuttle_rate())  # hear it, at normal pitch
+        self._shuttle_timer.start()
+
+    def shuttle_stop(self):
+        if not self._shuttle:
+            return
+        self._shuttle = 0
+        self._shuttle_timer.stop()
+        if self._shuttle_audio:
+            self.player.set_shuttle(None)
+        self._shuttle_audio = False
+        self._prev_t = self.chart_time()
+        self._tick()
+
+    def _shuttle_tick(self):
+        now = time.perf_counter()
+        dt, self._shuttle_last = now - self._shuttle_last, now
+        rate = self.shuttle_rate()
+        if self._shuttle_audio and self.player.playing:
+            self.player.set_shuttle(rate)                # the playback tick moves the playhead
+            return
+        if self._shuttle_audio:                          # playback stopped (end of the song)
+            self._shuttle_audio = False
+            self.player.set_shuttle(None)
+        end = self.player.duration + self.shift() if self.player.loaded else self.view.canvas.duration
+        t = min(max(0.0, self._shuttle_pos + rate * dt), max(0.0, end))
+        self._shuttle_pos = t
+        if self.player.loaded:
+            self.player.seek(t - self.shift())
+        else:
+            self._cursor = t
+        self._prev_t = t
+        self._tick()
+        self.view.ensure_visible_time(t, page=False)
+        if (rate < 0 and t <= 0.0) or (rate > 0 and t >= end):
+            self._shuttle_timer.stop()                   # reached an end: wait there until released
+
+    def _button_hold(self, direction: int):
+        self._btn_dir = direction
+        self._btn_hold.start()
+
+    def _button_release(self, direction: int):
+        if self._btn_hold.isActive():                    # a click: jump a line
+            self._btn_hold.stop()
+            self.navigate(self.view.canvas._line_target(self.chart_time(), direction))
+        else:
+            self.shuttle_stop()
+
     def _try_play_without_audio(self) -> bool:
         QMessageBox.information(self, "Lyridan", "Pick your chart's audio first (🎵 Audio… or drop the file on "
                                                  "the window).")
@@ -532,12 +657,15 @@ class TimelinePanel(QWidget):
             self.player.seek(t - self.shift())
         else:
             self._cursor = t
+        self._prev_t = self.chart_time()      # a seek is not playback crossing the loop end
         self._tick()
 
     def navigate(self, t: float):
         """Keyboard navigation: move the playhead and keep it in view."""
         self.seek_chart(max(0.0, t))
-        self.view.ensure_visible_time(self.chart_time(), page=False)
+        # while playing, scroll the same way playback follow does, so the two don't fight
+        # over the view (small scroll vs page flip) on every key repeat
+        self.view.ensure_visible_time(self.chart_time(), page=self.follow and self.player.playing)
 
     def play_from(self, t: float):
         self.seek_chart(max(0.0, t - 0.3))
@@ -579,15 +707,20 @@ class TimelinePanel(QWidget):
         self.view.scroll_to_time(t, 40)
 
     def _show_focus(self, on: bool):
+        from PySide6.QtGui import QFontMetrics
+        f = self.focus_label.font()
+        f.setBold(True)                         # wide enough for both texts: the overview never shifts
+        need = max(QFontMetrics(f).horizontalAdvance(x) for x in ("⌨  Keys: timeline",
+                                                                  "⌨  Typing in a field · Enter or click away"))
+        self.focus_label.setMinimumWidth(max(190, need + 20))
         if on:
             acc = self.view.canvas.accent
             text = "#000000" if acc.lightness() > 140 else "#ffffff"
-            self.focus_label.setText("⌨  Keys active  ·  Esc to leave")
+            self.focus_label.setText("⌨  Keys: timeline")
             self.focus_label.setStyleSheet(f"background: {acc.name()}; color: {text}; font-weight: bold; "
                                            "border-radius: 4px; padding: 3px 8px;")
         else:
-            self.focus_label.setText("Click the timeline, preview or overview to use keys" if self.click_focus
-                                     else "Click the timeline to use keys")
+            self.focus_label.setText("⌨  Typing in a field · Enter or click away")
             self.focus_label.setStyleSheet("padding: 3px 8px;")
 
     def set_navigation(self, arrow_step: str, accelerate: bool):
@@ -609,7 +742,7 @@ class TimelinePanel(QWidget):
 
     def _tick(self):
         t = self.chart_time()
-        if self.player.playing:
+        if self.player.playing and not self._shuttle:
             rng = self.view.canvas.selection
             if self.btn_loop.isChecked() and rng and self._prev_t < rng[1] <= t and t - self._prev_t < 0.3:
                 self.seek_chart(rng[0])            # crossed the end of the loop: back to its start
@@ -629,7 +762,9 @@ class TimelinePanel(QWidget):
         self.preview.set_time(t)
         self._show_time(t)
         self.overview.update()
-        if self.follow and self.player.playing:
+        if self._shuttle:
+            self.view.ensure_visible_time(t, page=False)   # glide with the playhead, no page flips
+        elif self.follow and self.player.playing:
             self.view.ensure_visible_time(t)
         if ai != self._last_active:
             self._last_active = ai
@@ -679,5 +814,6 @@ class TimelinePanel(QWidget):
             self._style_range_clocks()
 
     def shutdown(self):
+        self._shuttle_timer.stop()
         self._timer.stop()
         self.player.close()

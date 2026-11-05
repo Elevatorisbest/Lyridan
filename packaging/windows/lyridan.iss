@@ -1,9 +1,9 @@
 ; Inno Setup script for Lyridan (Windows x64 installer)
-; Build:  iscc /DAppVersion=2.0.0 packaging\windows\lyridan.iss
+; Build:  iscc /DAppVersion=2.0.2 packaging\windows\lyridan.iss
 ; Expects the PyInstaller output in dist\Lyridan\
 
 #ifndef AppVersion
-  #define AppVersion "2.0.1"
+  #define AppVersion "2.0.2"
 #endif
 #define AppName "Lyridan"
 #define AppPublisher "Elevatorisbest"

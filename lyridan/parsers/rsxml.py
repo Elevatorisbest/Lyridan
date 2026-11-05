@@ -181,8 +181,97 @@ def _xml_attr(s: str) -> str:
              .replace('"', "&quot;").replace("'", "&apos;"))
 
 
+# ---------------------------------------------------------------------------
+# Overlap safety. Editor on Fire can crash on lyrics that overlap, so every exported
+# file obeys these rules in whole milliseconds (the precision the XML is written in):
+#   * no vocal starts before 0:00 (tools that clamp negative times to 0 would pile them up)
+#   * each vocal is at least MIN_LEN_MS long
+#   * each vocal ends at least MIN_GAP_MS before the next one starts
+# MIN_GAP_MS is 2, not 1, so a reader that truncates instead of rounding still can't
+# make two vocals touch.
+MIN_GAP_MS = 2
+MIN_LEN_MS = 1
+
+
+def _ms(seconds: float) -> int:
+    return int(round(seconds * 1000.0))
+
+
+def vocal_overlaps(entries: List[VocalEntry]) -> List[int]:
+    """Indices i where entries[i] breaks the rules above (overlaps / touches entries[i + 1],
+    starts before 0, has no length or is out of order). Empty = safe to export."""
+    bad = []
+    for i, e in enumerate(entries):
+        t, ln = _ms(e.time), _ms(e.length)
+        if t < 0 or ln < MIN_LEN_MS:
+            bad.append(i)
+        elif i + 1 < len(entries) and t + ln > _ms(entries[i + 1].time) - MIN_GAP_MS:
+            bad.append(i)
+    return bad
+
+
+@dataclass
+class OverlapFix:
+    entries: List[VocalEntry]
+    moved: int = 0          # starts pushed later (before 0:00, or too close to the previous vocal)
+    shortened: int = 0      # ends pulled in so they don't reach the next vocal (more than a rounding nudge)
+    lengthened: int = 0     # zero-length vocals given a minimal length
+    negative: int = 0       # vocals that were before 0:00
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.moved or self.shortened or self.lengthened)
+
+
+def fix_vocal_overlaps(entries: List[VocalEntry]) -> OverlapFix:
+    """Return a copy of ``entries`` that passes :func:`vocal_overlaps`.
+
+    Vocals are sorted by time; a start that is before 0:00 or too close to the previous one is
+    pushed just after it, then every length is clipped to end MIN_GAP_MS before the next start
+    (and is at least MIN_LEN_MS). Already-safe input comes back unchanged.
+    """
+    order = sorted(range(len(entries)), key=lambda i: (entries[i].time, i))
+    src = [entries[i] for i in order]
+    fix = OverlapFix([])
+    starts: List[int] = []
+    prev = None
+    for e in src:
+        t = _ms(e.time)
+        if t < 0:
+            fix.negative += 1
+        lo = 0 if prev is None else prev + MIN_LEN_MS + MIN_GAP_MS
+        if t < lo:
+            t = lo
+            fix.moved += 1
+        starts.append(t)
+        prev = t
+    out = []
+    for i, e in enumerate(src):
+        t = starts[i]
+        want = _ms(e.length)
+        ln = want
+        if i + 1 < len(src):
+            room = starts[i + 1] - MIN_GAP_MS - t          # >= MIN_LEN_MS by construction
+            if ln > room:
+                if ln - room > MIN_GAP_MS:                  # a real overlap, not a rounding nudge
+                    fix.shortened += 1
+                ln = room
+        if ln < MIN_LEN_MS:
+            ln = MIN_LEN_MS
+            fix.lengthened += 1
+        out.append(VocalEntry(t / 1000.0, ln / 1000.0, e.lyric, e.note))
+    fix.entries = out
+    return fix
+
+
 def write_vocals(entries: List[VocalEntry], path: str) -> None:
-    """Write a Rocksmith vocals XML in the same layout EOF / DLC Builder read."""
+    """Write a Rocksmith vocals XML in the same layout EOF / DLC Builder read.
+
+    Overlapping or touching vocals are fixed first (see :func:`fix_vocal_overlaps`), so a
+    written file can never contain lyrics that overlap."""
+    entries = fix_vocal_overlaps(entries).entries
+    if vocal_overlaps(entries):                          # cannot happen; never write a broken file
+        raise ValueError("Internal error: overlapping vocals left after the overlap fix.")
     lines = ["<?xml version='1.0' encoding='UTF-8'?>", f'<vocals count="{len(entries)}">']
     for e in entries:
         lines.append(f'  <vocal time="{e.time:.3f}" length="{e.length:.3f}" '

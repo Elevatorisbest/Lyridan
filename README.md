@@ -75,6 +75,7 @@ Apple's own syllable splits are kept: if the TTML splits a word (`para` + `dise`
 - Punctuation is cleaned up.
 - Characters are ASCII-safe for the stock font.
 - Backticks (`` ` ``) become apostrophes (`'`), so Editor on Fire can import the vocals XML without crashing (Options → General, on by default).
+- Overlap check: no two vocals in an exported XML overlap or touch, since overlapping lyrics can crash Editor on Fire. Each vocal ends at least 2 ms before the next one starts, has a length, and starts at 0:00 or later. If a vocal had to be moved or shortened by more than a rounding step, the export says so.
 
 ### Phrase-aware line breaks
 Lines are kept to about **7-8 sung syllables** (the usual charting rule of thumb; Japanese gets a little more). Every way of breaking a phrase is compared at once:
@@ -150,19 +151,31 @@ The **Start / End / Length** clocks show the lyric line under the playhead, or a
 - Jumping past the end of the loop with the keyboard or mouse isn't pulled back, so you can still move around freely.
 
 ### Keyboard
-The timeline keys work while the timeline has the keyboard. A coloured frame and a **Keys active** label show it is listening. To give it the keyboard, click:
+The timeline always has the keyboard, so the keys below work straight away, playing or paused. A **⌨ Keys: timeline** label shows it.
 
-- the timeline itself;
-- the lyrics preview or the overview strip;
-- the transport and zoom buttons;
-- the MAIN or SUB counter, or the Start / End / Length clocks.
+- Buttons, check boxes, drop-downs, tabs and the lyrics table never take the keyboard, so Space or an arrow key can't toggle or change a setting by accident.
+- Click into a value field (a number box, a text box, or a lyrics cell you double-click) to type in it. The arrow keys then change that value.
+- Press **Enter** or **Esc**, or click anywhere else, and the keyboard goes back to the timeline.
+- **Tab** never moves the keyboard into the settings. The ⌨ button lists the keys.
 
-Everything except the timeline itself can be switched off in Options. This works the same while playing or paused. **Esc** hands the keyboard back, and **Tab** never moves it into the settings, so these keys can't change anything outside the timeline. The ⌨ button lists them too.
+**Tap ← / →** to step the playhead one grid step. **Hold ← / →** to fast forward or rewind smoothly, like a tape shuttle:
+
+- After a fifth of a second the playhead glides continuously at the **fast forward / rewind speed** you set in Options (default 4× normal speed). The view scrolls along with it.
+- While playing you hear it at **normal pitch**, like a CD player's search: short snippets of the song, played forwards even while rewinding. Normal playback carries on when you let go.
+- While paused it glides silently.
+- It can **speed up the longer you hold** (Options → Timeline & playback → *Speed up while held*):
+  - *evenly*: the same amount faster every second;
+  - *slowly at first, then faster and faster*: good for searching nearby, then racing ahead.
+
+  You also choose the **top speed** (default 4× the starting speed) and how many **seconds of holding** it takes to get there (default 3 s). The Options page shows an example of what your settings do.
+- **Shift** doubles the speed.
+- The **◀◀ / ▶▶** buttons do the same: a click jumps to the previous / next line, press and hold to rewind / fast forward.
+- Jumps (taps, clicks, loops) cross-fade the audio instead of clicking, and the playhead never jumps back.
 
 | Key | Action |
 |---|---|
-| ← → | step the playhead (1/4 beat … 1 bar, set in Options; speeds up while held) |
-| Shift + ← → | 4× bigger steps |
+| ← → | tap: step the playhead (1/4 beat … 1 bar, set in Options) · hold: smooth rewind / fast forward |
+| Shift + ← → | 4× bigger steps · twice as fast while held |
 | Ctrl/Alt + ← → | previous / next lyric line |
 | PgUp / PgDn | previous / next section |
 | Home / End | start / end of the song |
@@ -282,10 +295,10 @@ Contractions, possessives, elongated words (*ooooh*) and hyphenated words are ha
 Open them with the **⚙ Options** button at the right end of the toolbar (or Edit → Options):
 
 - **Themes and text sizes**
-- **Playback defaults**, the **timeline arrow-key step** and whether clicking the preview, overview, transport buttons or clocks gives the timeline the keyboard
+- **Playback defaults**, the **arrow-key step**, and **fast forward / rewind**: starting speeds, whether and how they speed up while held, the top speed and how long it takes to reach (Timeline & playback)
 - **Reopening the last session** and the **default export folder**
 - **Notices:** the export disclaimer and resetting dismissed notices
-- **Alignment model management** and **About this build**
+- **Alignment model management** and **About this build** (in dev builds, clicking the orange **DEV** badge at the bottom right opens it too)
 
 | Theme | Look |
 |---|---|
@@ -300,6 +313,7 @@ Open them with the **⚙ Options** button at the right end of the toolbar (or Ed
 | Digital Studio Light | light version of Digital Studio, inspired by a classic DAW edit window |
 | Studio Console | dark, inspired by an analogue mixing console strip |
 | Studio Console Light | light, inspired by a different analogue console strip |
+| Cyber Pink | dark, full black with magenta-pink, neon green and touches of purple and blue |
 
 <details>
 <summary><b>Theme screenshots</b> (click to expand)</summary>
@@ -345,6 +359,10 @@ Open them with the **⚙ Options** button at the right end of the toolbar (or Ed
 **Studio Console Light**
 
 ![Studio Console Light theme](docs/screenshots/theme_studio_console_light.png)
+
+**Cyber Pink**
+
+![Cyber Pink theme](docs/screenshots/theme_cyber_pink.png)
 
 </details>
 
@@ -419,7 +437,7 @@ Every branch except `v1.1.1` and the test branches `workflowtest` / `digitalstud
 | `main` | stable | `2.0.0` | GitHub release **v2.0.0** |
 | tag `v*` | stable | `2.0.0` | release for that tag |
 
-- **Dev builds** show full build info in **Options → About this build**: branch, commit, message, build number, build machine, workflow run link and library versions, with a "Copy build info" button.
+- **Dev builds** show full build info in **Options → About this build** (or click the **DEV** badge at the bottom right): branch, commit, message, build number, build machine, workflow run link and library versions, with a "Copy build info" button.
 - **New release:** bump `VERSION` in `lyridan/__init__.py` before merging to `main`. If `VERSION` wasn't bumped, the files of the existing release are re-uploaded.
 - **Local builds** are dev builds unless you pass `--channel stable`.
 - `python -m lyridan --version` prints the same build info.

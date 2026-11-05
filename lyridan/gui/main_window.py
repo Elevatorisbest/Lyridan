@@ -184,12 +184,18 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._wheel_guard = WheelGuard(self)
         QApplication.instance().installEventFilter(self._wheel_guard)
+        from .keyboard_focus import TimelineKeyboard
+        self.keyboard = TimelineKeyboard(self, self.timeline.view.canvas)   # timeline owns the keys by default
         self._load_settings_into_ui()
         if buildinfo.is_dev():
             i = buildinfo.info()
             tag = QLabel(f" DEV {buildinfo.dev_build_label(i)} · {i.get('branch', '')} @ {i.get('commit_short', '')} ")
             tag.setStyleSheet("background:#f5a524; color:black; font-weight:bold; border-radius:3px;")
-            tag.setToolTip(buildinfo.as_text())
+            tag.setToolTip(buildinfo.as_text() + "\n\nClick for the build details (Options → About this build)")
+            tag.setCursor(Qt.PointingHandCursor)
+            tag.mousePressEvent = lambda ev: (self.open_options("build") if ev.button() == Qt.LeftButton
+                                              else None)
+            self.dev_tag = tag
             self.statusBar().addPermanentWidget(tag)
         self.apply_options()
         from .update_ui import UpdateController
@@ -322,7 +328,6 @@ class MainWindow(QMainWindow):
         self.timeline = TimelinePanel()
         self.timeline.entryActivated.connect(self._on_entry_activated)
         self.timeline.audioChanged.connect(self._on_audio_changed)
-        self.timeline.leaveRequested.connect(lambda: self.table.setFocus(Qt.OtherFocusReason))
         tl = self.timeline
 
         # ---- toolbar
@@ -469,11 +474,14 @@ class MainWindow(QMainWindow):
         lay.addWidget(tip)
         from .align_dialog import LRC_WARNING
         self.lrc_banner = QFrame()
-        self.lrc_banner.setStyleSheet("QFrame{background:#e6f0fb; border:1px solid #8bb4e6; border-radius:6px;}"
-                                      "QLabel{color:#14304f; border:none;}")
+        self.lrc_banner.setObjectName("InfoBanner")       # coloured from the theme (_style_info_banner)
         bl = QHBoxLayout(self.lrc_banner)
         bl.setContentsMargins(10, 6, 10, 6)
-        warn = QLabel("ℹ " + LRC_WARNING)
+        self.lrc_icon = QLabel("ℹ")
+        self.lrc_icon.setObjectName("InfoIcon")
+        self.lrc_icon.setAlignment(Qt.AlignTop)
+        bl.addWidget(self.lrc_icon)
+        warn = QLabel(LRC_WARNING)
         warn.setWordWrap(True)
         bl.addWidget(warn, 1)
         self.btn_align = QPushButton("Align to song audio…")
@@ -1401,10 +1409,11 @@ class MainWindow(QMainWindow):
         super().closeEvent(ev)
 
     # ------------------------------------------------------------------ options / theme / session
-    def open_options(self):
+    def open_options(self, page: str = ""):
+        """Edit → Options. ``page``: open on that tab ("build" = About this build)."""
         from .options_dialog import OptionsDialog
         self._read_settings_from_ui()
-        OptionsDialog(self.settings, self).exec()
+        OptionsDialog(self.settings, self, page=page if isinstance(page, str) else "").exec()
 
     SESSION_BASE_WIDTH = 300                   # session cluster width in the default 1380 px window
 
@@ -1449,6 +1458,13 @@ class MainWindow(QMainWindow):
         super().resizeEvent(ev)
         self._scale_toolbar()
 
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if not getattr(self, "_keys_ready", False):
+            self._keys_ready = True
+            self.keyboard.harden()                  # every widget exists now (incl. the update bar)
+            QTimer.singleShot(0, self.keyboard.give_back)
+
     def apply_options(self, reset_ack: bool = False):
         from .themes import apply_theme, current_colors
         app = QApplication.instance()
@@ -1459,16 +1475,38 @@ class MainWindow(QMainWindow):
         colors = current_colors(self.settings.theme)
         vocals = colors.get("vocals") or (colors["accent"] if self.settings.theme != "light" else "#2e8b57")
         self.timeline.set_accent(vocals, colors)
+        self._style_info_banner(colors)
         self.timeline.preview.set_font_size(self.settings.preview_font_pt)
         self.timeline.volume.setValue(self.settings.playback_volume)
         self.timeline.btn_metro.setChecked(self.settings.metronome)
         self.timeline.btn_follow.setChecked(self.settings.follow_playhead)
         self.timeline.set_navigation(self.settings.timeline_arrow_step, self.settings.timeline_accelerate)
-        self.timeline.click_focus = self.settings.timeline_click_focus
+        s = self.settings
+        self.timeline.set_shuttle_speeds(s.shuttle_ff_speed, s.shuttle_rew_speed, s.shuttle_accel,
+                                         s.shuttle_accel_max, s.shuttle_accel_time)
         self.timeline._show_focus(self.timeline.view.canvas.hasFocus())
         if reset_ack:
             self._disclaimer_seen_this_session = False
         self.update()
+
+    def _style_info_banner(self, c: dict):
+        """The "line-synced .lrc" info box in the theme's colours: a tint of the theme's info colour
+        (its accent unless the theme sets ``info``) with a solid border and icon, so it stands out
+        as an info box in every theme without clashing with it."""
+        info = QColor(c.get("info") or c["accent"])
+        base = QColor(c.get("text_bg") or c["bg"])
+        dark = base.lightness() < 128
+        k = 0.22 if dark else 0.14
+        bg = QColor(round(base.red() + (info.red() - base.red()) * k),
+                    round(base.green() + (info.green() - base.green()) * k),
+                    round(base.blue() + (info.blue() - base.blue()) * k))
+        text = c.get("text_fg") or c["fg"]
+        edge = info if dark else info.darker(135)          # keeps the frame visible on pale panels
+        self.lrc_banner.setStyleSheet(
+            f"QFrame#InfoBanner {{ background: {bg.name()}; border: 1px solid {edge.name()}; "
+            f"border-left: 4px solid {edge.name()}; border-radius: 6px; }}"
+            f"QFrame#InfoBanner QLabel {{ color: {text}; background: transparent; border: none; }}"
+            f"QFrame#InfoBanner QLabel#InfoIcon {{ color: {info.name()}; font-weight: bold; font-size: 15px; }}")
 
     def restore_session(self):
         if not self.settings.restore_session:
