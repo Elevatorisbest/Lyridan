@@ -270,8 +270,9 @@ How it differs from aligning an `.lrc`:
 - Write each line the way it is sung. Repeats can be shortened: `x2` / `(x2)` / `(2x)` at the end of a line, or on a line of its own (repeats the line above).
 - `[Chorus]`, `[Verse 2: Name]` or `Chorus:` lines are section names, not lyrics. `(parenthesised)` parts become backing-vocal lines, as in `.lrc` files.
 - Website leftovers such as "You might also like" or a trailing "123Embed" are ignored.
+- Apostrophe look-alikes (`’`, `′`, `ʼ`, `´`) count as normal apostrophes, so words like `heaven′s` are split into syllables (and don't lose the apostrophe in the ASCII export). This applies to every lyrics format.
 
-In our test (eight spoken lines over synthetic backing music, plus an ad-lib that isn't in the text and a text line that is never sung), every line was found within 60 ms of where it starts, from both the full mix and the vocal stem, and the unsung line was correctly left out. Real songs are harder - always check the result by ear.
+In our test (eight spoken lines over synthetic backing music, plus an ad-lib that isn't in the text and a text line that is never sung), every line was found within 60 ms of where it starts, from both the full mix and the vocal stem, and the unsung line was correctly left out. On a real song, *Baby Be Mine* (the chart's full-mix audio, no vocal stem, plain-text lyrics typed from memory), 77% of the hand-made chart's syllables got a vocal within a 1/16 note and the first line matched it to the millisecond; most of the rest are parenthesised backing lines (left out by default) and outro ad-libs that weren't in the text, plus one chorus where the model can barely hear the lead vocal in the mix. Always check the result by ear.
 
 ---
 

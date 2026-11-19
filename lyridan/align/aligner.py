@@ -24,6 +24,11 @@ WEAK_PRE_ROLL_S = 0.15   # ...they trust their LRC timestamp more:
 WEAK_ANCHOR = 4.0        # stronger pull towards the timestamp
 MAX_SHIFT_S = 4.0    # a line found further than this from its timestamp keeps the estimate
 SKIP_LINE_COST = 4.0      # plain-text lyrics: log-prob cost per letter for leaving a line out (not sung)
+GAP_FLOOR = float(np.log(0.8))   # plain-text lyrics: cost cap per frame of audio skipped between lines.
+#   Much cheaper than SKIP_FLOOR: without timestamps nothing else stops a line's first letters from
+#   being squeezed into a vocal-like intro or fill (Baby Be Mine: a bass fill heard as "a-n-a-n-t")
+UNTIMED_SKIP_FLOOR = float(np.log(0.4))   # ...and in the per-line pass that follows (lines with timestamps
+#   keep SKIP_FLOOR); 0.4-0.8 all fix that first line, the lower value delays line starts less
 LOCATE_MIN_PROB = 0.03    # ...a line placed with letters this unclear was only squeezed in: treat it as not found
 LOCATE_MAX_CELLS = 4e8    # frames x states above this: the line search runs on 40 ms frames
 
@@ -181,16 +186,22 @@ def detect_offset(em: np.ndarray, spf: float, line_starts: Sequence[float], blan
     return best, top, note
 
 
-def to_model_text(s: str) -> str:
-    """Lower-case ASCII letters + apostrophe, as the MMS aligner expects (uroman-style)."""
+def to_model_text(s: str, apostrophes: bool = True) -> str:
+    """Lower-case ASCII letters + apostrophe, as the MMS aligner expects (uroman-style).
+
+    ``apostrophes=False`` drops them: they are not sung, and without timestamps to anchor a
+    line an extra symbol to place tips weak spots (Baby Be Mine's first line: "don't" vs "dont"
+    decided whether "I don't" went into the bass fill before it)."""
     t = unicodedata.normalize("NFKD", s.lower())
     t = "".join(c for c in t if not unicodedata.combining(c))
-    t = t.replace("ß", "ss").replace("æ", "ae").replace("œ", "oe").replace("’", "'")
-    return re.sub(r"[^a-z']", "", t)
+    t = t.replace("ß", "ss").replace("æ", "ae").replace("œ", "oe")
+    t = re.sub("[\u2019\u2018\u201b\u2032\u02bc\u02b9\u00b4\uff07`]", "'", t)
+    return re.sub(r"[^a-z']" if apostrophes else r"[^a-z]", "", t)
 
 
 def ctc_align(logp: np.ndarray, tokens: Sequence[int], blank: int = 0,
-              start_cost: Optional[np.ndarray] = None, token_probs: Optional[List[float]] = None):
+              start_cost: Optional[np.ndarray] = None, token_probs: Optional[List[float]] = None,
+              skip_floor: float = SKIP_FLOOR):
     """CTC Viterbi forced alignment with free (unaligned) audio before and after.
 
     ``start_cost[t]`` (<= 0) is added when the sung text starts at frame t; it keeps
@@ -205,7 +216,7 @@ def ctc_align(logp: np.ndarray, tokens: Sequence[int], blank: int = 0,
         return None
     # skipped audio before the line costs like silence (capped, so other singing can be skipped too);
     # without this the path would start every line one frame late for free
-    skip = np.maximum(logp[:, blank].astype(np.float64), SKIP_FLOOR)
+    skip = np.maximum(logp[:, blank].astype(np.float64), skip_floor)
     prefix = np.concatenate(([0.0], np.cumsum(skip)))[:T]
     S = 2 * L + 1
     lab = np.full(S, blank, dtype=np.int64)
@@ -298,12 +309,13 @@ def ctc_score(logp: np.ndarray, tokens: Sequence[int], blank: int = 0) -> float:
 
 # ---------------------------------------------------------------------------
 def locate_lines(logp: np.ndarray, line_tokens: Sequence[Sequence[int]], blank: int = 0,
-                 skip_cost: float = SKIP_LINE_COST) -> List[Optional[Tuple[int, int, float]]]:
+                 skip_cost: float = SKIP_LINE_COST, gap_floor: Optional[float] = None
+                 ) -> List[Optional[Tuple[int, int, float]]]:
     """Find every line of untimed (plain-text) lyrics in the whole song at once.
 
     One CTC Viterbi pass over all lines in order. Between lines there is a "gap" state
-    that pays like silence, capped (``SKIP_FLOOR``), so instrumental parts and singing
-    that is not in the text (ad-libs, unlisted repeats) are cheap to pass over. A line
+    that pays like silence, capped (``GAP_FLOOR``), so instrumental parts and singing
+    that is not in the text (ad-libs, unlisted repeats, a vocal-like intro) are cheap to pass over. A line
     can be left out entirely (``skip_cost`` per letter) when it is not sung.
     Returns (first frame, end frame, mean letter probability) per line, or None for
     lines that were left out or have no letters.
@@ -348,7 +360,7 @@ def locate_lines(logp: np.ndarray, line_tokens: Sequence[Sequence[int]], blank: 
         Tn = T // 2
         lp = np.logaddexp(lp[0:2 * Tn:2], lp[1:2 * Tn:2]) - np.log(2.0)
     Tf = lp.shape[0]
-    g = np.maximum(lp[:, blank], SKIP_FLOOR)
+    g = np.maximum(lp[:, blank], GAP_FLOOR if gap_floor is None else gap_floor)
 
     NEG = -1e30
     dp = np.full(S, NEG)
@@ -428,7 +440,8 @@ def _place_untimed(source: SourceLyrics, s: Settings, em: np.ndarray, spf: float
     mains = sorted((l for l in processed.lines if not l.background), key=lambda l: l.index)
     toks = []
     for ln in mains:
-        tk = [aligner.index[ch] for sy in ln.syllables() for ch in to_model_text(sy.text) if ch in aligner.index]
+        tk = [aligner.index[ch] for sy in ln.syllables() for ch in to_model_text(sy.text, apostrophes=False)
+              if ch in aligner.index]
         toks.append(tk)
     found = locate_lines(em, toks, aligner.blank)
     report.untimed = True
@@ -456,9 +469,19 @@ def _place_untimed(source: SourceLyrics, s: Settings, em: np.ndarray, spf: float
         j = i
         while j < n and starts[j] is None:
             j += 1
-        a = ends[i - 1] + 0.3 if i > 0 else max(0.0, (starts[j] if j < n else song_len) - sum(est[i:j]) - 0.3 * (j - i))
-        b = starts[j] - 0.3 if j < n else min(song_len, a + sum(est[i:j]) + 0.3 * (j - i))
-        b = max(b, a + 0.2 * (j - i))
+        need = sum(est[i:j]) + 0.3 * (j - i)
+        if i == 0:
+            b = (starts[j] - 0.3) if j < n else song_len
+            a = max(0.0, b - need)
+        elif j == n:
+            a = ends[i - 1] + 0.3
+            b = min(song_len, a + need)
+        else:
+            a, b = ends[i - 1] + 0.3, starts[j] - 0.3
+            if b - a < 0.2 * (j - i):          # no room: squeeze in, but always between the neighbours' starts
+                a = min(ends[i - 1], (starts[i - 1] + starts[j]) / 2)
+                b = starts[j]
+        b = max(b, a + 0.01 * (j - i))
         total = sum(est[i:j]) or 1.0
         t = a
         for k in range(i, j):
@@ -578,7 +601,7 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
         tokens: List[int] = []
         owner: List[int] = []
         for si, sy in enumerate(sylls):
-            for ch in to_model_text(sy.text):
+            for ch in to_model_text(sy.text, apostrophes=not report.untimed):
                 if ch in aligner.index:
                     tokens.append(aligner.index[ch])
                     owner.append(si)
@@ -599,7 +622,8 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
         frame_t = (f0 + np.arange(len(window))) * spf
         cost = -ANCHOR_WEIGHT * (WEAK_ANCHOR if weak else 1.0) * np.abs(frame_t - t0)
         unfound = ln.index in report.not_found
-        res = ctc_align(window, tokens, aligner.blank, cost) if tokens and not unfound else None
+        res = ctc_align(window, tokens, aligner.blank, cost,
+                        skip_floor=UNTIMED_SKIP_FLOOR if report.untimed else SKIP_FLOOR) if tokens and not unfound else None
         ok = False
         conf = 0.0
         reason = ""
