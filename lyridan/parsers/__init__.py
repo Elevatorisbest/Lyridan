@@ -5,6 +5,7 @@ import os
 
 from ..model import SourceLyrics
 from .lrc import parse_lrc
+from .plain import looks_untimed, parse_plain
 from .ttml import parse_ttml
 
 LYRIC_EXTENSIONS = (".ttml", ".xml", ".json", ".lrc", ".elrc", ".txt")
@@ -24,7 +25,7 @@ def read_text(path: str) -> str:
 
 
 def load_lyrics(path: str) -> SourceLyrics:
-    """Load a lyrics file, detecting TTML vs LRC by content (not just extension)."""
+    """Load a lyrics file, detecting TTML vs LRC vs plain text by content (not just extension)."""
     text = read_text(path)
     head = text.lstrip("﻿ \t\r\n")[:2000]
     if head.startswith("{") or "<tt" in head or "<tt " in text[:5000] or head.startswith("<?xml") and "<tt" in text:
@@ -32,13 +33,9 @@ def load_lyrics(path: str) -> SourceLyrics:
     if os.path.splitext(path)[1].lower() == ".ttml":
         return parse_ttml(text, path)
     lyr = parse_lrc(text, path)
-    if not lyr.lines:
-        # plain text without timestamps: one untimed line per text line
-        from ..model import SourceLine, SourcePiece
-        lines = []
-        for l in text.splitlines():
-            if l.strip():
-                lines.append(SourceLine([SourcePiece(w, None, None) for w in l.split()], None, None))
-        lyr.lines = lines
-        lyr.timing = "none"
+    if not lyr.lines and looks_untimed(text):
+        # plain hand-written lyrics without any timestamps: aligned to the audio later
+        plain = parse_plain(text, path)
+        plain.title, plain.artist = lyr.title, lyr.artist
+        return plain
     return lyr

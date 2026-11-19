@@ -30,6 +30,17 @@ def swap_backticks(text: str) -> str:
     return text.replace("`", "'")
 
 
+# Apostrophe look-alikes from websites, word processors and keyboards: ’ ‘ ‛ ′ ʼ ʹ ´ ＇
+_APOSTROPHES = str.maketrans({c: "'" for c in "\u2019\u2018\u201b\u2032\u02bc\u02b9\u00b4\uff07"})
+
+
+def normalize_apostrophes(text: str) -> str:
+    """heaven′s / heaven’s -> heaven's, so the word is recognised and syllabized (same length,
+    one character for one, so source character spans still line up). Rocksmith's font is
+    ASCII-only anyway: ′ was dropped at export ("dont"), ’ became ' there."""
+    return text.translate(_APOSTROPHES)
+
+
 def detect_language(text: str) -> str:
     ja = sum(1 for c in text if is_japanese_char(c))
     ru = sum(1 for c in text if "Ѐ" <= c <= "ӿ")
@@ -255,6 +266,7 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
         if use_romaji:
             pieces = sl.romaji
         text, owner = build_text(pieces)
+        text = normalize_apostrophes(text)
         if settings.backtick_to_apostrophe:
             text = swap_backticks(text)       # same length, so ``owner`` still lines up
         warns: List[str] = []
@@ -287,11 +299,15 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
         for i, ln in enumerate(lines):
             txt = overrides.get(ln.index)
             if txt is not None and txt.strip():
+                txt = normalize_apostrophes(txt)
                 if settings.backtick_to_apostrophe:
                     txt = swap_backticks(txt)
                 lines[i] = apply_override(ln, txt)
     lines.sort(key=lambda l: l.start)
-    if source.timing in ("line", "none"):
+    if source.timing == "none":
+        warnings.insert(0, "These lyrics have no timestamps (plain text) - line and syllable times are a rough "
+                           "placeholder until you align them to the song audio.")
+    elif source.timing == "line":
         warnings.insert(0, "This file only has line timing - syllable times inside each line are estimated until you align it to the song audio.")
     return Processed(lines=lines, language=doc_lang, warnings=_dedupe(warnings), source=source)
 
