@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self.restore_session)
         self.statusBar().showMessage("Loading language dictionaries…")
         w = _Warmup()
-        w.signals.done.connect(lambda: self.statusBar().showMessage("Ready - drop a .ttml/.lrc file and a Rocksmith XML", 8000))
+        w.signals.done.connect(lambda: self.statusBar().showMessage("Ready - drop a .ttml/.lrc/.txt lyrics file and a Rocksmith XML", 8000))
         QThreadPool.globalInstance().start(w)
 
     # ------------------------------------------------------------------ UI
@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(4)
 
-        self.lyrics_card = FileCard("Lyrics", "Drop a .ttml or .lrc file here")
+        self.lyrics_card = FileCard("Lyrics", "Drop a .ttml, .lrc or plain .txt file here")
         self.lyrics_card.browse.clicked.connect(self.open_lyrics)
         self.lyrics_card.clear.clicked.connect(self.clear_lyrics)
         self.beat_card = FileCard("Beatmap", "Drop the Rocksmith XML of your chart (lead/rhythm/bass)")
@@ -481,9 +481,9 @@ class MainWindow(QMainWindow):
         self.lrc_icon.setObjectName("InfoIcon")
         self.lrc_icon.setAlignment(Qt.AlignTop)
         bl.addWidget(self.lrc_icon)
-        warn = QLabel(LRC_WARNING)
-        warn.setWordWrap(True)
-        bl.addWidget(warn, 1)
+        self.lrc_text = QLabel(LRC_WARNING)
+        self.lrc_text.setWordWrap(True)
+        bl.addWidget(self.lrc_text, 1)
         self.btn_align = QPushButton("Align to song audio…")
         self.btn_align.clicked.connect(self.align_to_audio)
         bl.addWidget(self.btn_align)
@@ -507,8 +507,8 @@ class MainWindow(QMainWindow):
         self.table.customContextMenuRequested.connect(self._table_menu)
         self.table.cellDoubleClicked.connect(self._on_cell_double)
         lay.addWidget(self.table, 1)
-        self.empty_hint = QLabel("No lyrics loaded yet.\n\nDrop a .ttml (e.g. Apple Music syllable lyrics) or "
-                                 ".lrc file onto this window,\nthen drop the Rocksmith XML of your chart for the beatmap.")
+        self.empty_hint = QLabel("No lyrics loaded yet.\n\nDrop a .ttml (e.g. Apple Music syllable lyrics), "
+                                 ".lrc or plain .txt lyrics file onto this window,\nthen drop the Rocksmith XML of your chart for the beatmap.")
         self.empty_hint.setAlignment(Qt.AlignCenter)
         self.empty_hint.setStyleSheet("color: gray; font-size: 14px;")
         lay.addWidget(self.empty_hint)
@@ -908,13 +908,19 @@ class MainWindow(QMainWindow):
         extra = ", includes romaji" if src.has_romaji else ""
         if src.timing == "line":
             extra += " - align to audio for syllable timing"
+        elif src.timing == "none":
+            extra += " - align to audio to time it"
         self.lyrics_card.set_file(path, f"{len(src.lines)} lines, {timing}{extra}")
         self.settings.last_session["lyrics"] = path
         self._update_lrc_banner()
         self.recalculate()
 
     def _update_lrc_banner(self):
-        self.lrc_banner.setVisible(bool(self.source) and self.source.timing in ("line", "none"))
+        from .align_dialog import LRC_WARNING, PLAIN_WARNING
+        show = bool(self.source) and self.source.timing in ("line", "none")
+        if show:
+            self.lrc_text.setText(PLAIN_WARNING if self.source.timing == "none" else LRC_WARNING)
+        self.lrc_banner.setVisible(show)
 
     def use_aligned_source(self, src):
         """Use audio-aligned lyrics without saving them to a file."""
@@ -927,7 +933,7 @@ class MainWindow(QMainWindow):
     def align_to_audio(self):
         from .align_dialog import run_alignment
         if not self.source:
-            QMessageBox.information(self, "Lyridan", "Load a .lrc lyrics file first.")
+            QMessageBox.information(self, "Lyridan", "Load a lyrics file (.lrc or plain .txt) first.")
             return
         run_alignment(self)
 
@@ -1205,7 +1211,10 @@ class MainWindow(QMainWindow):
             items += [("warn", w) for w in res.warnings]
         if not self.beatmap and self.source:
             items.insert(0, ("warn", "No beatmap loaded: lyrics are not snapped to the chart's beat grid."))
-        if self.source and self.source.timing in ("line", "none"):
+        if self.source and self.source.timing == "none":
+            items.insert(0, ("warn", "Plain-text lyrics have no timing - the times are only a placeholder. "
+                                     "Use Tools → Align lyrics to song audio before exporting."))
+        elif self.source and self.source.timing == "line":
             items.insert(0, ("warn", "Line-synced .lrc: syllable timing is only estimated and likely inaccurate. "
                                      "Prefer a syllable-synced .ttml, or use Tools → Align lyrics to song audio."))
         for kind, text in items:

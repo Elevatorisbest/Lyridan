@@ -1,4 +1,4 @@
-"""GUI flow for the experimental 'align .lrc to song audio' feature."""
+"""GUI flow for the experimental 'align lyrics to song audio' feature (.lrc and plain-text lyrics)."""
 from __future__ import annotations
 
 import os
@@ -13,6 +13,10 @@ AUDIO_FILTER = "Audio (*.wav *.ogg *.flac *.mp3 *.aif *.aiff *.opus *.m4a);;All 
 LRC_WARNING = ("<b>Line-synced .lrc:</b> only line starts are known. <b>Align it to the song audio</b> to time "
                "every syllable. If you can get a syllable-synced <b>.ttml</b> (e.g. Apple Music) for this song, "
                "it is still the most accurate source.")
+
+PLAIN_WARNING = ("<b>Plain-text lyrics:</b> no timing at all yet - the times shown are only a rough placeholder. "
+                 "<b>Align them to the song audio</b>: Lyridan listens for every line and then times every "
+                 "syllable. An isolated vocal stem works best.")
 
 MODEL_CONSENT = """
 <h3>Download the alignment model?</h3>
@@ -120,14 +124,18 @@ def _run_with_progress(parent, title: str, fn):
 class AlignSetupDialog(QDialog):
     """Pick the audio file and (optionally) a known offset."""
 
-    def __init__(self, parent, default_dir: str, prior: float):
+    def __init__(self, parent, default_dir: str, prior: float, untimed: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Align lyrics to song audio")
         self.setMinimumWidth(600)
         lay = QVBoxLayout(self)
+        how = ("Your lyrics have <b>no timestamps</b>, so Lyridan first listens through the whole song to find "
+               "where each line is sung (lines in the text that are not sung are skipped), then moves every "
+               "syllable to where it is actually sung." if untimed else
+               "Lyridan listens to the song and moves every syllable to where it is actually sung, "
+               "using the .lrc line timestamps as anchors.")
         info = QLabel(
-            "<p>Lyridan listens to the song and moves every syllable to where it is actually sung, "
-            "using the .lrc line timestamps as anchors. The result is a <b>syllable-synced .ttml</b> "
+            f"<p>{how} The result is a <b>syllable-synced .ttml</b> "
             "you can keep, fix and reuse.</p>"
             "<p><b>Tips:</b> an isolated vocal stem (e.g. from UVR / Demucs) gives the best results; the "
             "chart's audio or the original song both work. Accuracy varies - songs with heavy backing "
@@ -153,7 +161,8 @@ class AlignSetupDialog(QDialog):
         row2.addWidget(self.stem, 1)
         row2.addWidget(b2)
         form.addRow("Vocal stem", row2)
-        self.auto = QCheckBox("Detect where the lyrics start automatically (recommended)")
+        self.auto = QCheckBox("Detect where the lyrics start automatically (recommended)" if not untimed else
+                              "Detect whether this is the chart's audio or the original song (recommended)")
         self.auto.setChecked(True)
         form.addRow(self.auto)
         self.offset = QDoubleSpinBox()
@@ -163,7 +172,8 @@ class AlignSetupDialog(QDialog):
         self.offset.setValue(prior)
         self.offset.setEnabled(False)
         self.offset.setToolTip("Audio time minus lyric time. For your chart's audio this is usually the intro "
-                               "silence plus the empty bars; for the original song it is 0.")
+                               "silence plus the empty bars; for the original song it is 0." +
+                               (" Plain-text lyrics are saved as audio time minus this value." if untimed else ""))
         self.auto.toggled.connect(lambda on: self.offset.setEnabled(not on))
         form.addRow("Known offset", self.offset)
         self.readings = QCheckBox("Japanese: let the audio pick kanji readings (緋 → aka or hi)")
@@ -238,7 +248,8 @@ def run_alignment(window) -> None:
         ms = window.beatmap.measure_starts
         prior += window.beatmap.first_n_measures_end(window.settings.empty_bars) - (ms[0] if ms else 0)
     folder = os.path.dirname(window.source_path or os.path.expanduser("~"))
-    setup = AlignSetupDialog(window, folder, prior)
+    untimed = src.timing == "none"
+    setup = AlignSetupDialog(window, folder, prior, untimed)
     if window.timeline.player.loaded:
         setup.path.setText(window.timeline.player.path)      # the timeline's audio is a good default
     setup.readings.setChecked(window.settings.verify_readings)
@@ -251,10 +262,17 @@ def run_alignment(window) -> None:
     audio_path = setup.path.text()
     listen_path = setup.stem.text().strip() or audio_path     # the vocal stem is easier to hear
     offset = None if setup.auto.isChecked() else setup.offset.value()
+    # untimed lyrics: which timeline to save on comes from the timeline's audio setting when it is the same
+    # file, else from the audio's length against the chart's songLength
+    kind = None
+    tl = window.timeline
+    if tl.player.loaded and tl.player.path == audio_path and tl.audio_mode.currentData() in ("chart", "song"):
+        kind = tl.audio_mode.currentData()
+    song_length = window.beatmap.song_length if window.beatmap and window.beatmap.song_length else None
 
     def job(progress):
         return align_lyrics(src, listen_path, window.settings, store.model_path, store.meta(), progress,
-                            offset=offset, offset_prior=prior or None)
+                            offset=offset, offset_prior=prior or None, audio_kind=kind, song_length=song_length)
 
     res = _run_with_progress(window, "Aligning lyrics to the audio…", job)
     if not res:

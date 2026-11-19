@@ -23,6 +23,9 @@ WEAK_REL = 0.25     # lines whose text evidence is below this share of the song'
 WEAK_PRE_ROLL_S = 0.15   # ...they trust their LRC timestamp more:
 WEAK_ANCHOR = 4.0        # stronger pull towards the timestamp
 MAX_SHIFT_S = 4.0    # a line found further than this from its timestamp keeps the estimate
+SKIP_LINE_COST = 4.0      # plain-text lyrics: log-prob cost per letter for leaving a line out (not sung)
+LOCATE_MIN_PROB = 0.03    # ...a line placed with letters this unclear was only squeezed in: treat it as not found
+LOCATE_MAX_CELLS = 4e8    # frames x states above this: the line search runs on 40 ms frames
 
 
 @dataclass
@@ -45,6 +48,9 @@ class AlignmentReport:
     timeline_shift: float = 0.0    # subtracted from audio times when saving
     readings: list = field(default_factory=list)   # ReadingChange: readings changed by listening
     audio_kind: str = ""           # "chart" | "song" | "other"
+    untimed: bool = False          # the lyrics had no timestamps (plain text): lines were found by listening
+    located: int = 0               # ...how many lines that search found
+    not_found: set = field(default_factory=set)   # ...source line indices it could not find
 
     @property
     def aligned(self) -> int:
@@ -55,17 +61,26 @@ class AlignmentReport:
         return len(self.lines)
 
     def summary(self) -> str:
-        bad = [l for l in self.lines if not l.aligned]
+        bad = [l for l in self.lines if not l.aligned and l.index not in self.not_found]
         kind = {"chart": "your chart's audio (intro silence + empty bars)", "song": "the original song",
                 "other": "an audio file with an unknown offset"}.get(self.audio_kind, "the audio")
-        s = (f"Aligned {self.aligned} of {self.total} lines to the audio. The lyrics were found "
-             f"{self.offset:+.2f} s into the audio{' (detected automatically)' if self.offset_detected else ''}, "
-             f"which looks like {kind}.")
+        if self.untimed:
+            s = (f"The lyrics had no timestamps, so Lyridan listened for every line: it found {self.located} of "
+                 f"{self.total} lines in the audio and aligned {self.aligned} of them syllable by syllable. "
+                 f"Times are saved for {kind}.")
+        else:
+            s = (f"Aligned {self.aligned} of {self.total} lines to the audio. The lyrics were found "
+                 f"{self.offset:+.2f} s into the audio{' (detected automatically)' if self.offset_detected else ''}, "
+                 f"which looks like {kind}.")
         if bad:
             s += f" {len(bad)} line(s) kept estimated timing - check them by ear."
+        if self.untimed and self.located < self.total:
+            s += (f" {self.total - self.located} line(s) could not be found by listening (maybe not sung, or "
+                  "drowned out) and were placed between their neighbours.")
         hard = [l for l in self.lines if l.hard_to_hear]
         if hard:
-            s += (f" {len(hard)} line(s) were hard to hear in this audio, so they lean on the .lrc timestamps - "
+            s += (f" {len(hard)} line(s) were hard to hear in this audio, so they lean on "
+                  f"{'where the line search put them' if self.untimed else 'the .lrc timestamps'} - "
                   "check them by ear. If you aligned to the full mix, an isolated vocal stem (UVR5, Demucs…) "
                   "usually helps with such lines.")
         changed = [r for r in self.readings if r.applied]
@@ -282,15 +297,217 @@ def ctc_score(logp: np.ndarray, tokens: Sequence[int], blank: int = 0) -> float:
 
 
 # ---------------------------------------------------------------------------
+def locate_lines(logp: np.ndarray, line_tokens: Sequence[Sequence[int]], blank: int = 0,
+                 skip_cost: float = SKIP_LINE_COST) -> List[Optional[Tuple[int, int, float]]]:
+    """Find every line of untimed (plain-text) lyrics in the whole song at once.
+
+    One CTC Viterbi pass over all lines in order. Between lines there is a "gap" state
+    that pays like silence, capped (``SKIP_FLOOR``), so instrumental parts and singing
+    that is not in the text (ad-libs, unlisted repeats) are cheap to pass over. A line
+    can be left out entirely (``skip_cost`` per letter) when it is not sung.
+    Returns (first frame, end frame, mean letter probability) per line, or None for
+    lines that were left out or have no letters.
+    """
+    T = logp.shape[0]
+    n_lines = len(line_tokens)
+    if T == 0 or n_lines == 0:
+        return [None] * n_lines
+    lab: List[int] = []
+    gap: List[bool] = []
+    owner: List[int] = []              # line of each state (-1 = gap)
+    gap_idx: List[int] = []
+    for k, toks in enumerate(line_tokens):
+        gap_idx.append(len(lab))
+        lab.append(blank); gap.append(True); owner.append(-1)
+        for i, tk in enumerate(toks):
+            if i:
+                lab.append(blank); gap.append(False); owner.append(k)     # optional blank between letters
+            lab.append(int(tk)); gap.append(False); owner.append(k)
+    gap_idx.append(len(lab))
+    lab.append(blank); gap.append(True); owner.append(-1)
+    S = len(lab)
+    lab_a = np.asarray(lab, dtype=np.int64)
+    gap_a = np.asarray(gap, dtype=bool)
+    is_tok = ~gap_a & (lab_a != blank)          # letters (the other line states are optional blanks)
+    # s-2 -> s skips a blank (inside a line) or a gap (straight into the next line) between different letters
+    can_skip = np.zeros(S, dtype=bool)
+    for s_ in range(2, S):
+        can_skip[s_] = is_tok[s_] and is_tok[s_ - 2] and lab[s_] != lab[s_ - 2]
+    jump_src = np.full(S, -1, dtype=np.int64)
+    jump_cost = np.zeros(S)
+    for k, toks in enumerate(line_tokens):
+        if toks:
+            jump_src[gap_idx[k + 1]] = gap_idx[k]
+            jump_cost[gap_idx[k + 1]] = -skip_cost * len(toks)
+    has_jump = jump_src >= 0
+
+    # long songs with long lyrics: search on 40 ms frames (letters still fit: 25 per second)
+    factor = 2 if T * S > LOCATE_MAX_CELLS else 1
+    lp = logp.astype(np.float64)
+    if factor == 2:
+        Tn = T // 2
+        lp = np.logaddexp(lp[0:2 * Tn:2], lp[1:2 * Tn:2]) - np.log(2.0)
+    Tf = lp.shape[0]
+    g = np.maximum(lp[:, blank], SKIP_FLOOR)
+
+    NEG = -1e30
+    dp = np.full(S, NEG)
+    dp[0] = 0.0                                 # before the first frame: in the leading gap
+    bp = np.zeros((Tf, S), dtype=np.int8)       # 0 stay, 1 from s-1, 2 from s-2, 3 jump (line left out)
+    neg1, neg2 = np.array([NEG]), np.array([NEG, NEG])
+    for t in range(Tf):
+        e = lp[t, lab_a]
+        e[gap_a] = g[t]
+        p1 = np.concatenate((neg1, dp[:-1]))
+        p2 = np.where(can_skip, np.concatenate((neg2, dp[:-2])), NEG)
+        pj = np.where(has_jump, dp[np.maximum(jump_src, 0)] + jump_cost, NEG)
+        cand = np.stack([dp, p1, p2, pj])
+        arg = cand.argmax(axis=0)
+        dp = cand[arg, np.arange(S)] + e
+        bp[t] = arg
+    last_tok = S - 2
+    end_s = S - 1 if dp[S - 1] >= dp[last_tok] or gap[last_tok] else last_tok
+    first = [-1] * n_lines
+    last = [-1] * n_lines
+    probs: List[List[float]] = [[] for _ in range(n_lines)]
+    s_, t = end_s, Tf - 1
+    while t >= 0:
+        k = owner[s_]
+        if k >= 0:
+            first[k] = t
+            if last[k] < 0:
+                last[k] = t
+            if is_tok[s_]:
+                probs[k].append(float(np.exp(lp[t, lab[s_]])))
+        move = int(bp[t, s_])
+        if move == 3:
+            s_ = int(jump_src[s_])
+        else:
+            s_ -= move
+        t -= 1
+    out: List[Optional[Tuple[int, int, float]]] = []
+    for k in range(n_lines):
+        conf = float(np.mean(probs[k])) if probs[k] else 0.0
+        if first[k] < 0 or not line_tokens[k] or conf < LOCATE_MIN_PROB:
+            out.append(None)
+        else:
+            out.append((first[k] * factor, (last[k] + 1) * factor, conf))
+    return out
+
+
+def guess_audio_kind(duration: float, song_length: Optional[float], song_shift: Optional[float],
+                     first_vocal: Optional[float] = None) -> Tuple[str, bool]:
+    """Is this the chart's audio (intro silence + empty bars before the song) or the original song?
+
+    Same rule as the timeline (duration against the chart's songLength); without a chart,
+    singing that starts before the shift can only be the original song. Returns (kind, sure).
+    """
+    shift = song_shift or 0.0
+    if shift <= 0:
+        return "song", True          # no intro silence / empty bars: both timelines are the same
+    if song_length:
+        if abs(duration - song_length) < 1.5:
+            return "chart", True
+        if abs(duration + shift - song_length) < 2.5:
+            return "song", True
+    if first_vocal is not None and first_vocal < shift - 0.25:
+        return "song", True          # the chart's audio is silent there
+    return "chart", False
+
+
+def _place_untimed(source: SourceLyrics, s: Settings, em: np.ndarray, spf: float, aligner: "OnnxAligner",
+                   song_len: float, offset: Optional[float], offset_prior: Optional[float],
+                   audio_kind: Optional[str], song_length: Optional[float], report: AlignmentReport,
+                   progress: Optional[ProgressFn]) -> Tuple[SourceLyrics, float]:
+    """Plain-text lyrics: find every line in the audio, then return line-synced lyrics
+    (on the lyrics' timeline) plus the offset (audio time - lyric time) to align them with."""
+    from ..pipeline import process
+    if progress:
+        progress("Listening for every line (the lyrics have no timestamps)…", 1.0)
+    processed = process(source, s)
+    mains = sorted((l for l in processed.lines if not l.background), key=lambda l: l.index)
+    toks = []
+    for ln in mains:
+        tk = [aligner.index[ch] for sy in ln.syllables() for ch in to_model_text(sy.text) if ch in aligner.index]
+        toks.append(tk)
+    found = locate_lines(em, toks, aligner.blank)
+    report.untimed = True
+    report.located = sum(1 for f in found if f is not None)
+    report.not_found = {ln.index for ln, f in zip(mains, found) if f is None}
+    starts: List[Optional[float]] = [None if f is None else f[0] * spf for f in found]
+    ends: List[Optional[float]] = [None if f is None else f[1] * spf for f in found]
+    first_vocal = next((x for x in starts if x is not None), None)
+    if offset is None:
+        kind, sure = (audio_kind, True) if audio_kind in ("chart", "song") else \
+            guess_audio_kind(song_len, song_length, offset_prior, first_vocal)
+        offset = (offset_prior or 0.0) if kind == "chart" else 0.0
+        if not sure:
+            report.offset_note = ("could not tell whether this is the chart's audio or the original song "
+                                  f"(load the chart XML first) - assumed {'the chart' if kind == 'chart' else 'the original song'}"
+                                  "; check that the first line lines up")
+    # lines that were not found: spread between the found neighbours by their estimated lengths
+    n = len(mains)
+    est = [max(0.5, l.end - l.start) for l in mains]
+    i = 0
+    while i < n:
+        if starts[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j < n and starts[j] is None:
+            j += 1
+        a = ends[i - 1] + 0.3 if i > 0 else max(0.0, (starts[j] if j < n else song_len) - sum(est[i:j]) - 0.3 * (j - i))
+        b = starts[j] - 0.3 if j < n else min(song_len, a + sum(est[i:j]) + 0.3 * (j - i))
+        b = max(b, a + 0.2 * (j - i))
+        total = sum(est[i:j]) or 1.0
+        t = a
+        for k in range(i, j):
+            d = (b - a) * est[k] / total
+            starts[k], ends[k] = t, t + d
+            t += d
+        i = j
+    times = {}                                  # source line index -> (start, end) on the lyrics' timeline
+    for k, ln in enumerate(mains):
+        st = starts[k] - offset
+        nxt = starts[k + 1] - offset if k + 1 < n else None
+        en = max(ends[k] - offset, st + 0.2)
+        times[ln.index] = (st, max(en, min(nxt, en + 0.5)) if nxt is not None and nxt > en else en)
+    out: List[SourceLine] = []
+    cur = None
+    for i, sl in enumerate(source.lines):
+        if i in times:
+            cur = times[i]
+        elif not sl.background:
+            cur = None
+        t0, t1 = times.get(i) or cur or (None, None)
+        if t0 is None:      # a line without letters (or a background part before any line)
+            nxt = next((times[j] for j in range(i + 1, len(source.lines)) if j in times), None)
+            t0, t1 = (nxt[0], nxt[1]) if nxt else (0.0, 0.5)
+        pieces = [SourcePiece(p.text, None, None, p.joined) for p in sl.pieces]
+        if pieces:
+            pieces[0].start = t0
+        out.append(SourceLine(pieces, t0, t1, sl.background, sl.agent, sl.key, sl.section, sl.romaji,
+                              sl.translation))
+    timed = SourceLyrics(lines=out, language=source.language, title=source.title, artist=source.artist,
+                         timing="line", has_romaji=source.has_romaji, path=source.path)
+    return timed, offset
+
+
+# ---------------------------------------------------------------------------
 def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, model_path: str, meta: dict,
                  progress: Optional[ProgressFn] = None, audio: Optional[np.ndarray] = None,
-                 offset: Optional[float] = None, offset_prior: Optional[float] = None
+                 offset: Optional[float] = None, offset_prior: Optional[float] = None,
+                 audio_kind: Optional[str] = None, song_length: Optional[float] = None
                  ) -> Tuple[SourceLyrics, AlignmentReport]:
-    """Align line-synced lyrics to the song audio; returns syllable-synced lyrics + report.
+    """Align line-synced or untimed (plain-text) lyrics to the song audio; returns
+    syllable-synced lyrics + report.
 
     ``offset`` = audio time minus lyric time if known; otherwise it is detected from
     the audio (``offset_prior`` helps when detection is ambiguous). The returned
     lyrics stay on the *lyrics'* timeline, so the normal sync settings still apply.
+    Untimed lyrics (``timing == "none"``) are first searched for in the whole song;
+    ``audio_kind`` ("chart" / "song", if known) or the chart's ``song_length`` decide
+    which timeline their times are saved on.
     """
     from ..pipeline import process
     from .audio import load_audio
@@ -306,6 +523,9 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
     s = Settings.from_json(settings.to_json())
     s.background = "exclude"
     report = AlignmentReport()
+    if source.timing == "none":
+        source, offset = _place_untimed(source, s, em, spf, aligner, song_len, offset, offset_prior,
+                                        audio_kind, song_length, report, progress)
     main_starts = [l.start for l in source.lines if not l.background and l.start is not None]
     if offset is None:
         if progress:
@@ -320,7 +540,7 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
     #   anything else: keep the lyrics' own timeline
     if offset_prior is not None and abs(offset - offset_prior) <= 2.0:
         report.audio_kind, report.timeline_shift = "chart", offset_prior
-    elif abs(offset) <= 2.0:
+    elif abs(offset) <= 2.0 or (report.untimed and offset == 0.0):
         report.audio_kind, report.timeline_shift = "song", 0.0
     else:
         report.audio_kind, report.timeline_shift = "other", offset
@@ -378,11 +598,14 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
         window = em[f0:f1]
         frame_t = (f0 + np.arange(len(window))) * spf
         cost = -ANCHOR_WEIGHT * (WEAK_ANCHOR if weak else 1.0) * np.abs(frame_t - t0)
-        res = ctc_align(window, tokens, aligner.blank, cost) if tokens else None
+        unfound = ln.index in report.not_found
+        res = ctc_align(window, tokens, aligner.blank, cost) if tokens and not unfound else None
         ok = False
         conf = 0.0
         reason = ""
-        if res is None:
+        if unfound:
+            reason = "not found in the audio (not sung?) - placed between its neighbours"
+        elif res is None:
             reason = "text does not fit the audio window"
         else:
             spans, conf = res
@@ -423,7 +646,7 @@ def align_lyrics(source: SourceLyrics, audio_path: str, settings: Settings, mode
                 sy.end += offset - report.timeline_shift
         report.lines.append(LineResult(ln.index, ln.source_text, ok, conf,
                                        (sylls[0].start + report.timeline_shift - t0) if ok else 0.0, reason,
-                                       hard_to_hear=weak))
+                                       hard_to_hear=weak and not unfound))
         out_lines.append(_to_source_line(ln, sl))
         if progress and progress("Aligning lines…", (n + 1) / max(1, len(lines))) is False:
             raise InterruptedError("Cancelled")

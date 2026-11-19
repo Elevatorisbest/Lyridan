@@ -812,3 +812,142 @@ def test_info_banner_follows_the_theme(tmp_path, monkeypatch):
         w.timeline.shutdown()
         w.deleteLater()
         app.processEvents()
+
+
+# ---------------------------------------------------------------------------- 2.1.0: plain-text lyrics
+PLAIN = """[ti:Demo]
+[Verse 1]
+Every night I dream of you (dream of you)
+Paradise is calling me x2
+
+Chorus:
+Hold on, Max2 is here
+[x3]
+You might also like
+[Bridge: Someone]
+Come on, come on (2x)
+Last line here12Embed
+"""
+
+
+def test_plain_text_lyrics_are_parsed(tmp_path):
+    p = tmp_path / "song.txt"
+    p.write_text(PLAIN, encoding="utf-8")
+    src = load_lyrics(str(p))
+    assert src.timing == "none" and src.title == "Demo"
+    main = [l for l in src.lines if not l.background]
+    assert [l.text for l in main] == (["Every night I dream of you"] + ["Paradise is calling me"] * 2 +
+                                      ["Hold on, Max2 is here"] * 3 + ["Come on, come on"] * 2 + ["Last line here"])
+    assert [l.section for l in main] == ["Verse 1"] * 3 + ["Chorus"] * 3 + ["Bridge"] * 3
+    bg = [l for l in src.lines if l.background]
+    assert [l.text for l in bg] == ["(dream of you)"] and bg[0].start == main[0].start
+    starts = [l.start for l in main]
+    assert starts == sorted(starts) and len(set(starts)) == len(starts)   # placeholder times, in order
+    pr = process(src, Settings())
+    assert any("no timestamps" in w for w in pr.warnings)
+    # real LRC is still LRC
+    assert load_lyrics(os.path.join(F, "test_song.lrc")).timing != "none"
+
+
+def _fake_emissions(lines_tokens, sung, T, V=28, seed=0):
+    """Log-probs where line k's letters are clearly heard from frame sung[k] (3 frames each, 2 apart)."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    p = np.full((T, V), 0.01)
+    p[:, 0] = 0.9
+    for k, f in sung.items():
+        for tk in lines_tokens[k]:
+            p[f:f + 3] = 0.01
+            p[f:f + 3, tk] = 0.85
+            f += 5
+    for f in range(T):                       # some singing that is not in the text
+        if 900 <= f < 960:
+            p[f] = 0.01
+            p[f, rng.integers(20, V)] = 0.8
+    p /= p.sum(1, keepdims=True)
+    return np.log(p)
+
+
+def test_locate_lines_finds_lines_and_skips_unsung_ones():
+    np = pytest.importorskip("numpy")
+    from lyridan.align.aligner import locate_lines
+    lines = [[1, 2, 3, 4, 5], [6, 7, 6, 7], [8, 9, 10, 11, 12, 13], [14, 15, 16], [17, 18, 19, 1]]
+    sung = {0: 50, 1: 300, 2: 600, 4: 1200}                      # line 3 is in the text but never sung
+    res = locate_lines(_fake_emissions(lines, sung, 1400), lines, 0)
+    for k, f in sung.items():
+        assert res[k] is not None and abs(res[k][0] - f) <= 1, (k, res[k])
+    assert res[3] is None
+    assert locate_lines(np.zeros((0, 28)), lines) == [None] * 5
+
+
+def test_guess_audio_kind():
+    from lyridan.align.aligner import guess_audio_kind
+    assert guess_audio_kind(200.0, 200.5, 14.0) == ("chart", True)
+    assert guess_audio_kind(186.0, 200.0, 14.0) == ("song", True)
+    assert guess_audio_kind(186.0, None, 14.0, first_vocal=5.0) == ("song", True)   # singing in the silence
+    assert guess_audio_kind(186.0, None, 14.0, first_vocal=20.0) == ("chart", False)
+    assert guess_audio_kind(186.0, None, 0.0) == ("song", True)
+
+
+def test_align_plain_text_end_to_end(tmp_path, monkeypatch):
+    np = pytest.importorskip("numpy")
+    from lyridan.align import aligner as A
+    from lyridan.align.aligner import to_model_text
+    labels = ["-", "a", "i", "e", "n", "o", "u", "t", "s", "r", "m", "k", "l", "d", "g", "h", "y", "b", "p",
+              "w", "c", "v", "j", "z", "f", "'", "q", "x"]
+    text = ["hold on tight", "never let me go", "this line is never sung", "under the city lights"]
+    p = tmp_path / "song.txt"
+    p.write_text("[Chorus]\n" + "\n".join(text) + "\n", encoding="utf-8")
+    src = load_lyrics(str(p))
+    idx = {c: i for i, c in enumerate(labels)}
+    toks = [[idx[c] for c in to_model_text(t)] for t in text]
+    sung = {0: 1000, 1: 1300, 3: 1700}                  # frames (20 ms): 20 s, 26 s, 34 s into the audio
+    em = _fake_emissions(toks, sung, 2200, V=len(labels))
+
+    class FakeAligner:
+        def __init__(self, *_):
+            self.labels, self.blank, self.sr = labels, 0, 16000
+            self.index = idx
+
+        def emissions(self, audio, progress=None):
+            return em, 0.02
+
+    monkeypatch.setattr(A, "OnnxAligner", FakeAligner)
+    audio = np.zeros(int(44.0 * 16000), dtype=np.float32)
+    s = Settings()
+    # the chart's audio (its length matches songLength): saved 14 s earlier (intro silence + bars)
+    out, rep = A.align_lyrics(src, "", s, "", {}, audio=audio, offset_prior=14.0, song_length=44.0)
+    main = [l for l in out.lines if not l.background]
+    assert rep.untimed and rep.located == 3 and rep.audio_kind == "chart"
+    for (k, f), ln in zip(sorted(sung.items()), [main[0], main[1], main[3]]):
+        assert abs(ln.start - (f * 0.02 - 14.0)) < 0.1, (ln.text, ln.start)
+    assert main[1].end <= main[2].start < main[2].end <= main[3].start      # unsung line kept between neighbours
+    bad = [l for l in rep.lines if not l.aligned]
+    assert len(bad) == 1 and "not found" in bad[0].reason
+    assert "no timestamps" in rep.summary()
+    # the original song: audio time = lyric time
+    out, rep = A.align_lyrics(src, "", s, "", {}, audio=audio, offset_prior=14.0, audio_kind="song")
+    assert rep.audio_kind == "song" and abs(out.lines[0].start - 20.0) < 0.1
+
+
+def test_plain_text_banner(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    for k in ("HOME", "APPDATA", "XDG_CONFIG_HOME"):
+        monkeypatch.setenv(k, str(tmp_path))
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from lyridan.gui.main_window import MainWindow
+    p = tmp_path / "song.txt"
+    p.write_text(PLAIN, encoding="utf-8")
+    w = MainWindow()
+    try:
+        w.load_lyrics_file(str(p))
+        assert w.source.timing == "none"
+        assert not w.lrc_banner.isHidden() and "Plain-text" in w.lrc_text.text()
+        w.load_lyrics_file(os.path.join(F, "test_song.lrc"))
+        assert "Plain-text" not in w.lrc_text.text()
+    finally:
+        w.timeline.shutdown()
+        w.deleteLater()
+        app.processEvents()

@@ -2,7 +2,7 @@
 
 ![lyridanlogo](https://github.com/user-attachments/assets/335da193-0a28-4bf8-8848-3dcc610e3332)
 
-Lyridan turns synced lyrics (`.ttml` or `.lrc`) into a **Rocksmith 2014 vocals arrangement XML**.
+Lyridan turns synced lyrics (`.ttml` or `.lrc`) - or plain, hand-written lyrics with no timing at all (`.txt`) - into a **Rocksmith 2014 vocals arrangement XML**.
 The output is already syllabized, romanized and snapped to your chart's beatmap, ready to import into
 **Editor on Fire** or **Charter**, where you check and fine-tune it before it goes into your CDLC.
 
@@ -23,6 +23,7 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 [The timeline](#the-timeline) ·
 [How sync works](#how-sync-works) ·
 [Using .lrc files](#using-lrc-files) ·
+[Plain-text lyrics](#plain-text-lyrics-txt) ·
 [Language details](#language-details) ·
 [Options and themes](#options-and-themes) ·
 [Installation](#installation) ·
@@ -34,7 +35,7 @@ The output is already syllabized, romanized and snapped to your chart's beatmap,
 
 ## Quick start
 
-1. **Lyrics:** drop a `.ttml` or `.lrc` file onto the window.
+1. **Lyrics:** drop a `.ttml`, `.lrc` or plain `.txt` file onto the window (plain text and line-synced `.lrc` then need **Align to song audio…**).
 2. **Beatmap:** drop the arrangement XML of your chart (lead, rhythm or bass - it holds the synced beatmap).
 3. **Audio:** drop the audio file your chart uses, or pick it with **🎵 Audio…** in the toolbar. It's used for playback and the timeline.
 4. **Check:** play through the **timeline**, then look through the **Lyrics** tab underneath it (edit lines if needed) and the **Notes** tab.
@@ -61,6 +62,7 @@ Moving on to another song? **New chart…** (top right of the toolbar) clears th
 - Apple Music **syllable-synced TTML** (raw TTML or the JSON API response) - the most accurate source.
 - Word- or line-synced TTML.
 - Plain **LRC** and enhanced LRC (`<mm:ss.xx>` word tags). These work well once aligned to the song audio, see [Using .lrc files](#using-lrc-files).
+- **Plain-text lyrics** (`.txt`) with no timestamps at all: Lyridan finds every line in the song audio and times it, see [Plain-text lyrics](#plain-text-lyrics-txt).
 
 Apple's own syllable splits are kept: if the TTML splits a word (`para` + `dise`), those splits are used and timed exactly.
 
@@ -254,6 +256,25 @@ When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to s
 
 ---
 
+## Plain-text lyrics (.txt)
+
+No synced lyrics for your song? Type or paste the words into a plain `.txt` file (one sung line per line) and drop it onto the window. It has **no timing at all**, so the times you see first are only a placeholder: click **Align to song audio…** in the Lyrics tab (also in **Tools**).
+
+How it differs from aligning an `.lrc`:
+1. **Lyridan finds every line first.** With no timestamps to anchor on, it listens through the whole song once and finds where each line is sung, in order. Instrumental parts and singing that isn't in your text (ad-libs, an extra chorus) are passed over; a line in your text that is never sung is left out and placed between its neighbours (it is listed so you can check it).
+2. **Then every syllable is timed** exactly like an `.lrc`, with the lines found in step 1 as anchors.
+3. **Which timeline?** The times are saved for your chart's audio (intro silence + empty bars) or for the original song. Lyridan tells them apart by comparing the audio's length with the chart's `songLength`, so **load the chart XML first**. If the audio is the timeline's audio and you set *Chart audio* / *Original song* there, that setting is used. Without either, Lyridan guesses and tells you to check the first line.
+
+**Tips:**
+- An isolated **vocal stem** (UVR5, Demucs…) helps even more here than with an `.lrc`, because there are no timestamps to fall back on.
+- Write each line the way it is sung. Repeats can be shortened: `x2` / `(x2)` / `(2x)` at the end of a line, or on a line of its own (repeats the line above).
+- `[Chorus]`, `[Verse 2: Name]` or `Chorus:` lines are section names, not lyrics. `(parenthesised)` parts become backing-vocal lines, as in `.lrc` files.
+- Website leftovers such as "You might also like" or a trailing "123Embed" are ignored.
+
+In our test (eight spoken lines over synthetic backing music, plus an ad-lib that isn't in the text and a text line that is never sung), every line was found within 60 ms of where it starts, from both the full mix and the vocal stem, and the unsung line was correctly left out. Real songs are harder - always check the result by ear.
+
+---
+
 ## Language details
 
 ### English
@@ -403,6 +424,7 @@ Works with the installed app too:
 python -m lyridan convert song.ttml -b "2_Bass_RS2.xml" -o "1_Vocals_RS2.xml" [--native-output JVocals.xml]
 python -m lyridan text song.lrc                               # print syllabized / romanized lyrics
 python -m lyridan align song.lrc song.ogg -b chart.xml --yes  # .lrc -> syllable .ttml using the audio
+python -m lyridan align song.txt vocals.wav -b chart.xml --yes  # plain text (no timestamps) -> syllable .ttml
 python -m lyridan convert --help                              # all options
 ```
 
@@ -455,7 +477,7 @@ The bundled language data can be rebuilt with the scripts in `tools/`:
 ### Project layout
 ```
 lyridan/
-  parsers/   ttml.py, lrc.py, rsxml.py     input files, beatmap, vocals XML
+  parsers/   ttml.py, lrc.py, plain.py, rsxml.py   input files (plain = untimed .txt), beatmap, vocals XML
   lang/      english.py, japanese.py, kana.py, russian.py, hyphen_model.py
   align/     audio alignment (MMS model, readings check)
   pipeline.py    language processing + timing of every syllable

@@ -3,6 +3,7 @@
   lyridan                          start the GUI
   lyridan convert song.ttml -b bass.xml -o vocals.xml [options]
   lyridan text song.lrc             print syllabized / romanized lyrics
+  lyridan align song.txt song.ogg -b chart.xml --yes   time plain-text (or .lrc) lyrics from the audio
 """
 from __future__ import annotations
 
@@ -106,7 +107,8 @@ def main(argv=None):
     t = sub.add_parser("text", help="print syllabized / romanized lyrics")
     common(t)
     t.add_argument("--sep", default="-")
-    al = sub.add_parser("align", help="EXPERIMENTAL: turn line-synced .lrc into syllable-synced .ttml using the "
+    al = sub.add_parser("align", help="EXPERIMENTAL: turn line-synced .lrc or plain-text lyrics (.txt, no "
+                                      "timestamps) into syllable-synced .ttml using the "
                                       "song audio (downloads a ~340 MB CC-BY-NC model on first use)")
     common(al)
     al.add_argument("audio", help="song audio or vocal stem (.wav .ogg .flac .mp3)")
@@ -151,7 +153,8 @@ def main(argv=None):
             s.verify_readings = False
         aligned, rep = align_lyrics(src, a.audio, s, store.model_path, store.meta(),
                                     lambda m, f: print(f"\r{m} {f:4.0%}", end="", file=sys.stderr) or True,
-                                    offset=a.audio_offset, offset_prior=prior)
+                                    offset=a.audio_offset, offset_prior=prior,
+                                    song_length=bm.song_length if bm and bm.song_length else None)
         print(file=sys.stderr)
         out = a.output or os.path.splitext(a.input)[0] + "_aligned.ttml"
         with open(out, "w", encoding="utf-8") as fh:

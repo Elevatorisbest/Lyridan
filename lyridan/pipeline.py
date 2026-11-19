@@ -291,7 +291,10 @@ def process(source: SourceLyrics, settings: Settings, native_script: bool = Fals
                     txt = swap_backticks(txt)
                 lines[i] = apply_override(ln, txt)
     lines.sort(key=lambda l: l.start)
-    if source.timing in ("line", "none"):
+    if source.timing == "none":
+        warnings.insert(0, "These lyrics have no timestamps (plain text) - line and syllable times are a rough "
+                           "placeholder until you align them to the song audio.")
+    elif source.timing == "line":
         warnings.insert(0, "This file only has line timing - syllable times inside each line are estimated until you align it to the song audio.")
     return Processed(lines=lines, language=doc_lang, warnings=_dedupe(warnings), source=source)
 
