@@ -166,8 +166,8 @@ The timeline always has the keyboard, so the keys below work straight away, play
 - While playing you hear it at **normal pitch**, like a CD player's search: short snippets of the song, played forwards even while rewinding. Normal playback carries on when you let go.
 - While paused it glides silently.
 - It can **speed up the longer you hold** (Options → Timeline & playback → *Speed up while held*):
-  - *evenly*: the same amount faster every second;
-  - *slowly at first, then faster and faster*: good for searching nearby, then racing ahead.
+  - *Linear*: the same amount faster every second;
+  - *Exponential*: good for searching nearby, then racing ahead.
 
   You also choose the **top speed** (default 4× the starting speed) and how many **seconds of holding** it takes to get there (default 3 s). The Options page shows an example of what your settings do.
 - **Shift** doubles the speed.
@@ -258,7 +258,7 @@ When an `.lrc` is loaded, the Lyrics tab shows a short note with an **Align to s
 
 ## Plain-text lyrics (.txt)
 
-No synced lyrics for your song? Type or paste the words into a plain `.txt` file (one sung line per line) and drop it onto the window. It has **no timing at all**, so the times you see first are only a placeholder: click **Align to song audio…** in the Lyrics tab (also in **Tools**).
+If you cannot acquire timecoded lyrics for your song, you can type or paste the words into a plain `.txt` file (one sung line per line) and drop it onto the window. It has **no timing at all**, so the times you see first are only a placeholder: click **Align to song audio…** in the Lyrics tab (also in **Tools**).
 
 How it differs from aligning an `.lrc`:
 1. **Lyridan finds every line first.** With no timestamps to anchor on, it listens through the whole song once and finds where each line is sung, in order. Instrumental parts and singing that isn't in your text (ad-libs, an extra chorus) are passed over; a line in your text that is never sung is left out and placed between its neighbours (it is listed so you can check it).
